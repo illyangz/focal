@@ -281,9 +281,16 @@ func record(_ args: Args) async {
             if !resumed { resumed = true; cont.resume() }
         }
 
+        // `onFatalError` needs to call `finish()`, but `finish` is defined
+        // below (it needs `stream`, which needs `recorder` first) — this box
+        // lets onFatalError call whatever `finish` ends up being once it's
+        // assigned, instead of just abandoning the writer unfinalized (which
+        // would leave no valid output file at all if the stream errors out
+        // mid-recording, e.g. the window being recorded gets closed).
+        var finishBox: () -> Void = {}
         let recorder = Recorder(writer: writer, input: input, adaptor: adaptor, cropRect: cropPixelRect) { errMsg in
             print("ERROR: stream failed: \(errMsg)")
-            resumeOnce("didStopWithError")
+            finishBox()
         }
 
         // Frame delivery AND the stop transition both go through this single
@@ -310,6 +317,14 @@ func record(_ args: Args) async {
                 recorder.stopping = true
                 Task {
                     try? await stream.stopCapture()
+                    guard recorder.started else {
+                        // Never got a single frame (e.g. the stream errored out
+                        // immediately) — there's nothing for finishWriting to
+                        // finalize, and calling it anyway would hang forever.
+                        trace("TRACE: finish() with no frames captured, skipping finishWriting")
+                        resumeOnce("finish with no frames")
+                        return
+                    }
                     input.markAsFinished()
                     writer.finishWriting {
                         trace("wrote \(recorder.frameCount) frames -> \(args.outPath), status=\(writer.status.rawValue), error=\(String(describing: writer.error))")
@@ -319,6 +334,7 @@ func record(_ args: Args) async {
                 }
             }
         }
+        finishBox = finish
 
         // stop on "stop\n" from stdin
         let stdinSource = DispatchSource.makeReadSource(fileDescriptor: FileHandle.standardInput.fileDescriptor, queue: .global())
