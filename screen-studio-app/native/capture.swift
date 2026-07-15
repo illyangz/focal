@@ -264,6 +264,15 @@ func record(_ args: Args) async {
     let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: adaptorAttrs)
     writer.add(input)
 
+    // Dispatch sources are reference-counted objects — if nothing outside the
+    // synchronous setup closure below retains them, ARC deallocates them the
+    // instant that closure returns (which happens almost immediately, since
+    // it just registers handlers and kicks off async work), silently
+    // cancelling them before any real stop trigger can ever arrive. Retaining
+    // them here, in record()'s own frame (alive for as long as the function
+    // hasn't returned, i.e. the whole recording), keeps them live for real.
+    var retainedSources: [DispatchSourceProtocol] = []
+
     trace("TRACE: entering continuation block")
     await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
         var resumed = false
@@ -277,9 +286,17 @@ func record(_ args: Args) async {
             resumeOnce("didStopWithError")
         }
 
+        // Frame delivery AND the stop transition both go through this single
+        // serial queue, so `recorder.stopping` can't be read by an in-flight
+        // frame callback at the exact moment it flips true elsewhere — that
+        // race let an adaptor.append() land after input.markAsFinished(),
+        // which can silently wedge/abort the writer so finishWriting's
+        // completion handler never fires (helper hangs until SIGKILL, and
+        // since finishWriting never ran, no output file exists at all).
+        let frameQueue = DispatchQueue(label: "focal.capture.frames")
         let stream = SCStream(filter: filter, configuration: config, delegate: recorder)
         do {
-            try stream.addStreamOutput(recorder, type: .screen, sampleHandlerQueue: DispatchQueue(label: "focal.capture.frames"))
+            try stream.addStreamOutput(recorder, type: .screen, sampleHandlerQueue: frameQueue)
         } catch {
             print("ERROR: addStreamOutput failed: \(error)")
             resumeOnce("addStreamOutput catch")
@@ -287,16 +304,18 @@ func record(_ args: Args) async {
         }
 
         func finish() {
-            trace("TRACE: finish() called, stopping=\(recorder.stopping)")
-            guard !recorder.stopping else { return }
-            recorder.stopping = true
-            Task {
-                try? await stream.stopCapture()
-                input.markAsFinished()
-                writer.finishWriting {
-                    trace("wrote \(recorder.frameCount) frames -> \(args.outPath), status=\(writer.status.rawValue)")
-                    print("DONE frames=\(recorder.frameCount) path=\(args.outPath)")
-                    resumeOnce("finishWriting completion")
+            frameQueue.async {
+                trace("TRACE: finish() called, stopping=\(recorder.stopping)")
+                guard !recorder.stopping else { return }
+                recorder.stopping = true
+                Task {
+                    try? await stream.stopCapture()
+                    input.markAsFinished()
+                    writer.finishWriting {
+                        trace("wrote \(recorder.frameCount) frames -> \(args.outPath), status=\(writer.status.rawValue), error=\(String(describing: writer.error))")
+                        print("DONE frames=\(recorder.frameCount) path=\(args.outPath)")
+                        resumeOnce("finishWriting completion")
+                    }
                 }
             }
         }
@@ -311,6 +330,7 @@ func record(_ args: Args) async {
             }
         }
         stdinSource.resume()
+        retainedSources.append(stdinSource)
 
         // stop on SIGINT/SIGTERM too
         signal(SIGINT, SIG_IGN)
@@ -318,9 +338,11 @@ func record(_ args: Args) async {
         let sigSrc = DispatchSource.makeSignalSource(signal: SIGINT, queue: .global())
         sigSrc.setEventHandler { trace("TRACE: SIGINT"); finish() }
         sigSrc.resume()
+        retainedSources.append(sigSrc)
         let sigSrc2 = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
         sigSrc2.setEventHandler { trace("TRACE: SIGTERM"); finish() }
         sigSrc2.resume()
+        retainedSources.append(sigSrc2)
 
         if let d = args.duration {
             DispatchQueue.global().asyncAfter(deadline: .now() + d) { trace("TRACE: duration elapsed"); finish() }
