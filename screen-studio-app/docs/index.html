@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studio — Beautiful screen recordings with automatic zoom</title>
+<meta name="description" content="Free, open-source screen recorder with automatic zoom, smooth cursor, backgrounds, masking, and more. For macOS and Windows.">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+  :root {
+    --bg: #0c0c0f;
+    --surface: #141418;
+    --panel: #1a1a1f;
+    --border: #26262e;
+    --text: #f2f2f5;
+    --muted: #8b8b96;
+    --accent: #49d34c;
+    --accent-dim: #1a2418;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg); color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---- Nav ---- */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(12,12,15,.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    max-width: 880px; margin: 0 auto; padding: 16px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+  .brand-icon {
+    width: 32px; height: 32px; border-radius: 8px; background: #fff;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .brand-icon svg { width: 18px; height: 18px; }
+  .nav-links { display: flex; gap: 28px; }
+  .nav-links a { color: var(--muted); font-size: 13.5px; transition: color .15s; }
+  .nav-links a:hover { color: var(--text); }
+
+  /* ---- Hero ---- */
+  .hero {
+    padding: 100px 0 80px; text-align: center;
+    position: relative;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 400px;
+    background: radial-gradient(ellipse, rgba(73,211,76,.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero h1 {
+    font-size: clamp(32px, 5.5vw, 52px);
+    font-weight: 800; letter-spacing: -1.5px; line-height: 1.15;
+    position: relative;
+  }
+  .hero h1 .green { color: var(--accent); }
+  .hero p.sub {
+    margin: 22px auto 0; max-width: 540px;
+    color: var(--muted); font-size: 15px; line-height: 1.7;
+  }
+
+  /* ---- CTA ---- */
+  .cta { margin-top: 44px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .dl-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .dl {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 14px 28px; border-radius: 10px;
+    font-size: 14.5px; font-weight: 600; font-family: inherit;
+    transition: transform .12s, box-shadow .12s, background .15s;
+    cursor: pointer; border: none;
+  }
+  .dl svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .dl-primary { background: var(--accent); color: #0c0c0f; }
+  .dl-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(73,211,76,.3); background: #5ce65f; }
+  .dl-secondary { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+  .dl-secondary:hover { border-color: #3a3a44; transform: translateY(-1px); }
+  .cta-note { color: var(--muted); font-size: 12.5px; }
+  .cta-note a { border-bottom: 1px solid var(--border); transition: border-color .15s; }
+  .cta-note a:hover { border-color: var(--text); }
+
+  /* ---- Screenshot ---- */
+  .screenshot {
+    margin: 72px auto 0; max-width: 780px;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--surface);
+    aspect-ratio: 16/9;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; position: relative;
+  }
+  .screenshot-placeholder {
+    display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 13px;
+  }
+  .screenshot-placeholder svg { width: 40px; height: 40px; opacity: .4; }
+
+  /* ---- Features ---- */
+  .features { padding: 96px 0 80px; }
+  .features h2 {
+    font-size: 22px; font-weight: 700; letter-spacing: -0.4px;
+    margin-bottom: 40px; text-align: center;
+  }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px;
+  }
+  .card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; background: var(--surface);
+    transition: border-color .15s, background .15s;
+  }
+  .card:hover { border-color: #35353f; background: var(--panel); }
+  .card-icon {
+    width: 36px; height: 36px; border-radius: 8px; background: var(--accent-dim);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 14px; font-size: 18px;
+  }
+  .card h3 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .card p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+  /* ---- Footer ---- */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0 48px;
+    display: flex; flex-wrap: wrap; gap: 8px 24px;
+    justify-content: space-between; align-items: center;
+    color: var(--muted); font-size: 12.5px;
+  }
+  footer a { color: var(--muted); transition: color .15s; }
+  footer a:hover { color: var(--text); }
+  footer .links { display: flex; gap: 20px; }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 600px) {
+    .hero { padding: 64px 0 48px; }
+    .dl-row { flex-direction: column; width: 100%; }
+    .dl { width: 100%; justify-content: center; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="brand">
+      <div class="brand-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#32381f">
+          <path fill="none" stroke="#49d34c" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 19a2 2 0 0 1-2-2m0-4v-2m0-4a2 2 0 0 1 2-2m4 0h2m4 0a2 2 0 0 1 2 2m0 4v2m0 4v4m2-2h-4m-4 0h-2"/>
+        </svg>
+      </div>
+      Studio
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="https://github.com/YOUR_GITHUB/studio-recorder">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="wrap">
+    <h1>Screen recordings that<br>look <span class="green">hand-crafted.</span></h1>
+    <p class="sub">Studio records your screen, then automatically zooms in on what matters — with a smooth cursor, clean backgrounds, and a built-in timeline editor. Free and open source.</p>
+
+    <div class="cta">
+      <div class="dl-row">
+        <a class="dl dl-primary" id="dlMac" href="#">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          Download for macOS
+        </a>
+        <a class="dl dl-secondary" id="dlWin" href="#">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.55l7.6-1.04v7.3H3V5.55zM3 18.45V12.7h7.6v7.3L3 18.45zM11.6 4.38L21 3.1v8.71h-9.4V4.38zM21 12.7v8.2l-9.4-1.29V12.7H21z"/></svg>
+          Download for Windows
+        </a>
+      </div>
+      <div class="cta-note">Free &middot; Open source (MIT) &middot; No account needed</div>
+    </div>
+
+    <div class="screenshot">
+      <div class="screenshot-placeholder">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
+        </svg>
+        Drop a screenshot or demo GIF here
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features" id="features">
+  <div class="wrap">
+    <h2>Everything you need, nothing you don't</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">+</div>
+        <h3>Automatic zoom</h3>
+        <p>Detects your clicks and zooms in smoothly. Every zoom is editable on the timeline.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&circlearrowleft;</div>
+        <h3>Smooth cursor</h3>
+        <p>The system cursor is hidden and re-drawn from precise movement data — resized, smoothed, with click ripples.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#9632;</div>
+        <h3>Backgrounds & styling</h3>
+        <p>Gradient or custom backgrounds, padding, rounded corners, shadows. Vertical, square, or widescreen.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#9673;</div>
+        <h3>Webcam & voice</h3>
+        <p>Draggable camera bubble, full-screen camera moments, and studio-style voice enhancement.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#9986;</div>
+        <h3>Real editing</h3>
+        <p>Cuts, trims, text slides, annotations, image and B-roll overlays — all on a multi-lane timeline.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#9638;</div>
+        <h3>Privacy built in</h3>
+        <p>Pixelate sensitive areas with masks that follow your zooms. Everything renders locally on your machine.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between;align-items:center;width:100%;">
+    <span>&copy; 2026 Studio. MIT licensed.</span>
+    <div class="links">
+      <a href="https://github.com/YOUR_GITHUB/studio-recorder">Source</a>
+      <a href="https://github.com/YOUR_GITHUB/studio-recorder/issues">Report an issue</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const DOWNLOADS = {
+    mac: "https://github.com/YOUR_GITHUB/studio-recorder/releases/latest/download/Studio.dmg",
+    win: "https://github.com/YOUR_GITHUB/studio-recorder/releases/latest/download/Studio-Setup.exe",
+  };
+
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform) || /Macintosh/.test(navigator.userAgent);
+
+  document.getElementById("dlMac").href = DOWNLOADS.mac;
+  document.getElementById("dlWin").href = DOWNLOADS.win;
+
+  if (isMac) {
+    document.getElementById("dlMac").classList.add("dl-primary");
+    document.getElementById("dlWin").classList.remove("dl-primary");
+    document.getElementById("dlWin").classList.add("dl-secondary");
+  }
+</script>
+</body>
+</html>

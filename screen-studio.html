@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studio — Beautiful Screen Recordings</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+  :root {
+    --bg: #0c0c0f;
+    --panel: #17171c;
+    --panel2: #1f1f26;
+    --border: #2a2a33;
+    --text: #f2f2f5;
+    --muted: #9a9aa5;
+    --accent: #49d34c;
+    --accent2: #32381f;
+    --danger: #e74c3c;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg); color: var(--text);
+    overflow: hidden;
+  }
+  .screen { display: none; height: 100vh; }
+  .screen.active { display: flex; }
+
+  /* ---------- Setup screen ---------- */
+  #setup { flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-mark svg { width: 26px; height: 26px; }
+  .logo h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+  .tagline { color: var(--muted); font-size: 15px; margin-top: -16px; }
+  .options { display: flex; gap: 14px; }
+  .opt {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 22px; width: 150px; cursor: pointer; text-align: center;
+    transition: all .15s; user-select: none;
+  }
+  .opt:hover { border-color: #3d3d4a; }
+  .opt.on { border-color: var(--accent); background: #1a2418; }
+  .opt .ico { font-size: 26px; margin-bottom: 8px; }
+  .opt .name { font-size: 14px; font-weight: 600; }
+  .opt .sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .btn {
+    border: none; border-radius: 10px; padding: 13px 30px; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: all .15s; font-family: inherit;
+  }
+  .btn-primary { background: var(--accent); color: #0c0c0f; }
+  .btn-primary:hover { background: #5ce65f; }
+  .btn-ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: #3d3d4a; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { color: var(--muted); font-size: 13px; max-width: 460px; text-align: center; line-height: 1.5; }
+  #err { color: #ff8a80; font-size: 13px; display: none; max-width: 480px; text-align: center; }
+
+  /* ---------- Recording screen ---------- */
+  #recording { flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
+  .rec-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--danger); display: inline-block;
+    animation: pulse 1.2s infinite; margin-right: 10px; vertical-align: middle; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  #recTimer { font-size: 52px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+  #countdown { font-size: 120px; font-weight: 800; color: var(--accent); }
+
+  /* ---------- Editor screen ---------- */
+  #editor { flex-direction: row; }
+  .stage {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+  }
+  .stage-canvas-wrap {
+    flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; min-height: 0;
+  }
+  #preview {
+    max-width: 100%; max-height: 100%; border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    background: #000;
+  }
+  .transport {
+    display: flex; align-items: center; gap: 14px; padding: 14px 24px 20px;
+  }
+  .tbtn {
+    width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--panel2); color: var(--text); font-size: 16px; cursor: pointer; flex-shrink: 0;
+  }
+  .tbtn:hover { border-color: var(--accent); }
+  .timeline-wrap { flex: 1; position: relative; height: 42px; }
+  #timeline {
+    position: absolute; inset: 0; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; overflow: hidden;
+  }
+  #tlTrim { position: absolute; top: 0; bottom: 0; background: rgba(108,92,231,.18);
+    border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); pointer-events: none; }
+  #tlPlayhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; pointer-events: none; }
+  .trim-handle {
+    position: absolute; top: 0; bottom: 0; width: 14px; cursor: ew-resize; z-index: 3;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .trim-handle::after { content: ""; width: 4px; height: 18px; border-radius: 2px; background: var(--accent2); }
+  #timecode { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 96px; text-align: right; }
+
+  .sidebar {
+    width: 320px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--border);
+    overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 22px;
+  }
+  .sidebar h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .row label { font-size: 13px; color: var(--text); }
+  .row input[type=range] { width: 150px; accent-color: var(--accent); }
+  .row select, .row input[type=color] {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font-family: inherit; font-size: 13px;
+  }
+  .row input[type=color] { width: 42px; height: 30px; padding: 2px; cursor: pointer; }
+  .bg-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .bg-swatch {
+    aspect-ratio: 1; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all .1s;
+  }
+  .bg-swatch.on { border-color: #fff; }
+  .seg { display: flex; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    flex: 1; background: none; border: none; color: var(--muted); padding: 8px 4px; font-size: 12.5px;
+    cursor: pointer; font-family: inherit; font-weight: 600;
+  }
+  .seg button.on { background: var(--accent); color: #0c0c0f; }
+  .switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .sl {
+    position: absolute; inset: 0; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 22px; cursor: pointer; transition: .15s;
+  }
+  .switch .sl::before {
+    content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--muted); top: 2px; left: 2px; transition: .15s;
+  }
+  .switch input:checked + .sl { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .sl::before { background: #fff; transform: translateX(16px); }
+
+  .export-box { border-top: 1px solid var(--border); padding-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .export-box .btn { width: 100%; }
+  #exportProgress { display: none; }
+  .prog-track { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .prog-fill { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
+  #progLabel { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
+  }
+  .topbar .logo-mark { width: 28px; height: 28px; border-radius: 8px; background: #fff; }
+  .topbar .logo-mark svg { width: 16px; height: 16px; }
+  .topbar-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ============ SETUP ============ -->
+<div id="setup" class="screen active">
+  <div class="logo">
+    <div class="logo-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#32381f"><path fill="none" stroke="#49d34c" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 19a2 2 0 0 1-2-2m0-4v-2m0-4a2 2 0 0 1 2-2m4 0h2m4 0a2 2 0 0 1 2 2m0 4v2m0 4v4m2-2h-4m-4 0h-2"/></svg></div>
+    <h1>Studio</h1>
+  </div>
+  <p class="tagline">Beautiful screen recordings in minutes — right in your browser.</p>
+  <div class="options">
+    <div class="opt on" id="optScreen">
+      <div class="ico">🖥️</div>
+      <div class="name">Screen</div>
+      <div class="sub">Always on</div>
+    </div>
+    <div class="opt" id="optCam">
+      <div class="ico">🤳</div>
+      <div class="name">Webcam</div>
+      <div class="sub">Overlay bubble</div>
+    </div>
+    <div class="opt" id="optMic">
+      <div class="ico">🎙️</div>
+      <div class="name">Microphone</div>
+      <div class="sub">Voiceover</div>
+    </div>
+    <div class="opt" id="optSys">
+      <div class="ico">🔊</div>
+      <div class="name">System audio</div>
+      <div class="sub">Tab/screen sound</div>
+    </div>
+  </div>
+  <button class="btn btn-primary" id="btnStart">Start Recording</button>
+  <p class="hint">You'll pick a screen, window, or tab to share. When you stop, you'll land in the editor to style and export your video. Works best in Chrome or Edge.</p>
+  <p id="err"></p>
+</div>
+
+<!-- ============ RECORDING ============ -->
+<div id="recording" class="screen">
+  <div id="countdown" style="display:none">3</div>
+  <div id="recLive" style="display:none; flex-direction:column; align-items:center; gap:24px;">
+    <div><span class="rec-dot"></span><span style="color:var(--muted);font-size:14px;">Recording…</span></div>
+    <div id="recTimer">00:00</div>
+    <button class="btn btn-danger" id="btnStop">■ &nbsp;Stop Recording</button>
+    <p class="hint">Switch to the window you want to demo. Come back here (or use the browser's "Stop sharing" bar) to finish.</p>
+  </div>
+</div>
+
+<!-- ============ EDITOR ============ -->
+<div id="editor" class="screen">
+  <div class="stage">
+    <div class="topbar">
+      <div class="topbar-title"><div class="logo-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#32381f"><path fill="none" stroke="#49d34c" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 19a2 2 0 0 1-2-2m0-4v-2m0-4a2 2 0 0 1 2-2m4 0h2m4 0a2 2 0 0 1 2 2m0 4v2m0 4v4m2-2h-4m-4 0h-2"/></svg></div> Studio — Editor</div>
+      <button class="btn btn-ghost" id="btnNew" style="padding:8px 16px;font-size:13px;">← New recording</button>
+    </div>
+    <div class="stage-canvas-wrap">
+      <canvas id="preview"></canvas>
+    </div>
+    <div class="transport">
+      <button class="tbtn" id="btnPlay">▶</button>
+      <div class="timeline-wrap">
+        <div id="timeline">
+          <div id="tlTrim"></div>
+          <div id="tlPlayhead"></div>
+        </div>
+        <div class="trim-handle" id="trimL"></div>
+        <div class="trim-handle" id="trimR"></div>
+      </div>
+      <div id="timecode">0:00 / 0:00</div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div>
+      <h3>Canvas</h3>
+      <div class="seg" id="aspectSeg">
+        <button data-a="16:9" class="on">16:9</button>
+        <button data-a="9:16">9:16</button>
+        <button data-a="1:1">1:1</button>
+        <button data-a="4:3">4:3</button>
+      </div>
+    </div>
+
+    <div>
+      <h3>Background</h3>
+      <div class="bg-grid" id="bgGrid"></div>
+      <div class="row" style="margin-top:12px;">
+        <label>Custom color</label>
+        <input type="color" id="bgColor" value="#1a1a2e">
+      </div>
+      <div class="row">
+        <label>Image</label>
+        <input type="file" id="bgImage" accept="image/*" style="width:150px;font-size:11px;color:var(--muted);">
+      </div>
+    </div>
+
+    <div>
+      <h3>Layout</h3>
+      <div class="row"><label>Padding</label><input type="range" id="ctlPad" min="0" max="22" value="7"></div>
+      <div class="row"><label>Corner radius</label><input type="range" id="ctlRadius" min="0" max="48" value="14"></div>
+      <div class="row"><label>Shadow</label><input type="range" id="ctlShadow" min="0" max="100" value="55"></div>
+      <div class="row"><label>Inset border</label><input type="range" id="ctlInset" min="0" max="20" value="0"></div>
+    </div>
+
+    <div id="camSection" style="display:none;">
+      <h3>Webcam</h3>
+      <div class="row">
+        <label>Show webcam</label>
+        <label class="switch"><input type="checkbox" id="ctlCamOn" checked><span class="sl"></span></label>
+      </div>
+      <div class="row"><label>Size</label><input type="range" id="ctlCamSize" min="10" max="35" value="20"></div>
+      <div class="row">
+        <label>Position</label>
+        <select id="ctlCamPos">
+          <option value="br">Bottom right</option>
+          <option value="bl">Bottom left</option>
+          <option value="tr">Top right</option>
+          <option value="tl">Top left</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Shape</label>
+        <select id="ctlCamShape">
+          <option value="circle">Circle</option>
+          <option value="rounded">Rounded</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="export-box">
+      <h3>Export</h3>
+      <div class="row">
+        <label>Format</label>
+        <select id="expFormat"></select>
+      </div>
+      <div class="row">
+        <label>Resolution</label>
+        <select id="expRes">
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="btnExport">Export Video</button>
+      <div id="exportProgress">
+        <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+        <div id="progLabel">Rendering…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<video id="screenVid" style="display:none" playsinline></video>
+<video id="camVid" style="display:none" playsinline muted></video>
+
+<script>
+/* ================================================================
+   Studio — single-file screen recorder & editor
+   ================================================================ */
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+/* ---------------- State ---------------- */
+const state = {
+  useCam: false, useMic: false, useSys: false,
+  screenBlob: null, camBlob: null, hasAudio: false, hasCam: false,
+  duration: 0, trimStart: 0, trimEnd: 0,
+  playing: false, exporting: false,
+  // style
+  aspect: 16 / 9, aspectName: "16:9",
+  bg: null, bgType: "gradient", bgImageEl: null,
+  pad: 7, radius: 14, shadow: 55, inset: 0,
+  camOn: true, camSize: 20, camPos: "br", camShape: "circle",
+  audioWired: false, audioDest: null, audioCtx: null,
+};
+
+/* ---------------- Background presets ---------------- */
+const BG_PRESETS = [
+  { type: "gradient", stops: ["#667eea", "#764ba2"], angle: 135 },
+  { type: "gradient", stops: ["#f093fb", "#f5576c"], angle: 135 },
+  { type: "gradient", stops: ["#4facfe", "#00f2fe"], angle: 135 },
+  { type: "gradient", stops: ["#43e97b", "#38f9d7"], angle: 135 },
+  { type: "gradient", stops: ["#fa709a", "#fee140"], angle: 135 },
+  { type: "gradient", stops: ["#30cfd0", "#330867"], angle: 135 },
+  { type: "gradient", stops: ["#a8edea", "#fed6e3"], angle: 135 },
+  { type: "gradient", stops: ["#ff9a9e", "#fecfef"], angle: 135 },
+  { type: "gradient", stops: ["#0c0c0f", "#2d2d44"], angle: 135 },
+  { type: "gradient", stops: ["#141e30", "#243b55"], angle: 135 },
+  { type: "solid", color: "#111114" },
+  { type: "solid", color: "#f4f4f6" },
+];
+state.bg = BG_PRESETS[0];
+
+/* ---------------- Setup screen ---------------- */
+const toggles = [["optCam", "useCam"], ["optMic", "useMic"], ["optSys", "useSys"]];
+toggles.forEach(([id, key]) => {
+  $(id).addEventListener("click", () => {
+    state[key] = !state[key];
+    $(id).classList.toggle("on", state[key]);
+  });
+});
+
+function showErr(msg) { const e = $("err"); e.textContent = msg; e.style.display = "block"; }
+function switchScreen(name) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  $(name).classList.add("active");
+}
+
+/* ---------------- Recording ---------------- */
+let screenStream, camStream, micStream;
+let screenRecorder, camRecorder;
+let screenChunks = [], camChunks = [];
+let recStartTime = 0, timerInterval = null;
+
+function pickMime(cands) {
+  for (const c of cands) if (MediaRecorder.isTypeSupported(c)) return c;
+  return "";
+}
+
+$("btnStart").addEventListener("click", async () => {
+  $("err").style.display = "none";
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 60 } },
+      audio: state.useSys,
+    });
+  } catch (e) { showErr("Screen capture was cancelled or blocked."); return; }
+
+  try {
+    if (state.useCam || state.useMic) {
+      const constraints = {};
+      if (state.useCam) constraints.video = { width: 1280, height: 720 };
+      if (state.useMic) constraints.audio = { echoCancellation: true, noiseSuppression: true };
+      const um = await navigator.mediaDevices.getUserMedia(constraints);
+      if (state.useCam) camStream = new MediaStream(um.getVideoTracks());
+      if (state.useMic) micStream = new MediaStream(um.getAudioTracks());
+    }
+  } catch (e) {
+    showErr("Webcam/microphone permission denied — recording screen only.");
+  }
+
+  // Mix audio (mic + system) into one track
+  const audioTracks = [];
+  const sysAudio = screenStream.getAudioTracks();
+  if ((sysAudio.length ? 1 : 0) + (micStream ? 1 : 0) > 1) {
+    const ctx = new AudioContext();
+    const dest = ctx.createMediaStreamDestination();
+    ctx.createMediaStreamSource(new MediaStream(sysAudio)).connect(dest);
+    ctx.createMediaStreamSource(micStream).connect(dest);
+    audioTracks.push(dest.stream.getAudioTracks()[0]);
+  } else if (sysAudio.length) {
+    audioTracks.push(sysAudio[0]);
+  } else if (micStream) {
+    audioTracks.push(micStream.getAudioTracks()[0]);
+  }
+  state.hasAudio = audioTracks.length > 0;
+  state.hasCam = !!camStream;
+
+  const mainStream = new MediaStream([...screenStream.getVideoTracks(), ...audioTracks]);
+  const vidMime = pickMime([
+    "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm",
+  ]);
+
+  screenChunks = []; camChunks = [];
+  screenRecorder = new MediaRecorder(mainStream, { mimeType: vidMime, videoBitsPerSecond: 12_000_000 });
+  screenRecorder.ondataavailable = (e) => { if (e.data.size) screenChunks.push(e.data); };
+
+  if (camStream) {
+    camRecorder = new MediaRecorder(camStream, { mimeType: pickMime(["video/webm;codecs=vp9", "video/webm"]), videoBitsPerSecond: 4_000_000 });
+    camRecorder.ondataavailable = (e) => { if (e.data.size) camChunks.push(e.data); };
+  }
+
+  // Stop when user hits the browser "Stop sharing" bar
+  screenStream.getVideoTracks()[0].addEventListener("ended", () => stopRecording());
+
+  // Countdown then start
+  switchScreen("recording");
+  $("countdown").style.display = "block";
+  $("recLive").style.display = "none";
+  for (let n = 3; n >= 1; n--) {
+    $("countdown").textContent = n;
+    await new Promise(r => setTimeout(r, 700));
+  }
+  $("countdown").style.display = "none";
+  $("recLive").style.display = "flex";
+
+  screenRecorder.start(1000);
+  if (camRecorder) camRecorder.start(1000);
+  recStartTime = Date.now();
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - recStartTime) / 1000);
+    $("recTimer").textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }, 250);
+});
+
+let stopping = false;
+async function stopRecording() {
+  if (stopping || !screenRecorder || screenRecorder.state === "inactive") return;
+  stopping = true;
+  clearInterval(timerInterval);
+
+  const stopped = (rec) => new Promise(res => { rec.onstop = res; rec.stop(); });
+  await stopped(screenRecorder);
+  if (camRecorder && camRecorder.state !== "inactive") await stopped(camRecorder);
+
+  [screenStream, camStream, micStream].forEach(s => s && s.getTracks().forEach(t => t.stop()));
+
+  state.screenBlob = new Blob(screenChunks, { type: "video/webm" });
+  state.camBlob = camChunks.length ? new Blob(camChunks, { type: "video/webm" }) : null;
+  stopping = false;
+  await openEditor();
+}
+$("btnStop").addEventListener("click", stopRecording);
+
+/* ---------------- Editor: load media ---------------- */
+const screenVid = $("screenVid"), camVid = $("camVid");
+const preview = $("preview"), pctx = preview.getContext("2d");
+
+function loadVideo(el, blob) {
+  return new Promise((resolve, reject) => {
+    el.src = URL.createObjectURL(blob);
+    el.onerror = () => reject(new Error("video load failed"));
+    el.onloadedmetadata = async () => {
+      // MediaRecorder webm blobs report Infinity duration — force it
+      if (!isFinite(el.duration)) {
+        el.currentTime = 1e9;
+        await new Promise(r => { el.onseeked = r; });
+        el.currentTime = 0;
+        await new Promise(r => { el.onseeked = r; });
+      }
+      resolve();
+    };
+  });
+}
+
+async function openEditor() {
+  await loadVideo(screenVid, state.screenBlob);
+  if (state.camBlob) await loadVideo(camVid, state.camBlob);
+
+  state.duration = screenVid.duration;
+  state.trimStart = 0;
+  state.trimEnd = state.duration;
+  $("camSection").style.display = state.camBlob ? "block" : "none";
+  setAspect(state.aspectName);
+  switchScreen("editor");
+  seekTo(0);
+  requestAnimationFrame(renderLoop);
+}
+
+/* ---------------- Canvas rendering ---------------- */
+function setAspect(name) {
+  state.aspectName = name;
+  const [w, h] = name.split(":").map(Number);
+  state.aspect = w / h;
+  const base = 1920;
+  if (state.aspect >= 1) { preview.width = base; preview.height = Math.round(base / state.aspect); }
+  else { preview.height = base; preview.width = Math.round(base * state.aspect); }
+  document.querySelectorAll("#aspectSeg button").forEach(b => b.classList.toggle("on", b.dataset.a === name));
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawBackground(ctx, W, H) {
+  const bg = state.bg;
+  if (bg.type === "image" && state.bgImageEl) {
+    const img = state.bgImageEl;
+    const s = Math.max(W / img.width, H / img.height);
+    const iw = img.width * s, ih = img.height * s;
+    ctx.drawImage(img, (W - iw) / 2, (H - ih) / 2, iw, ih);
+  } else if (bg.type === "solid") {
+    ctx.fillStyle = bg.color;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    const a = (bg.angle ?? 135) * Math.PI / 180;
+    const r = Math.sqrt(W * W + H * H) / 2;
+    const cx = W / 2, cy = H / 2;
+    const g = ctx.createLinearGradient(cx - Math.cos(a) * r, cy - Math.sin(a) * r, cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    bg.stops.forEach((c, i) => g.addColorStop(i / (bg.stops.length - 1), c));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawFrame(ctx, W, H) {
+  drawBackground(ctx, W, H);
+
+  const vw = screenVid.videoWidth, vh = screenVid.videoHeight;
+  if (!vw) return;
+
+  // content rect after padding
+  const padPx = (state.pad / 100) * Math.min(W, H);
+  const availW = W - padPx * 2, availH = H - padPx * 2;
+  const s = Math.min(availW / vw, availH / vh);
+  const dw = vw * s, dh = vh * s;
+  const dx = (W - dw) / 2, dy = (H - dh) / 2;
+  const rad = (state.radius / 1000) * Math.min(W, H) * 2.2;
+
+  // shadow
+  if (state.shadow > 0) {
+    ctx.save();
+    ctx.shadowColor = `rgba(0,0,0,${0.25 + state.shadow / 200})`;
+    ctx.shadowBlur = (state.shadow / 100) * Math.min(W, H) * 0.12;
+    ctx.shadowOffsetY = (state.shadow / 100) * Math.min(W, H) * 0.03;
+    roundRectPath(ctx, dx, dy, dw, dh, rad);
+    ctx.fillStyle = "#000";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // video clipped to rounded rect
+  ctx.save();
+  roundRectPath(ctx, dx, dy, dw, dh, rad);
+  ctx.clip();
+  ctx.drawImage(screenVid, dx, dy, dw, dh);
+  // inset border
+  if (state.inset > 0) {
+    ctx.lineWidth = (state.inset / 100) * Math.min(W, H) * 0.04;
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    roundRectPath(ctx, dx, dy, dw, dh, rad);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // webcam bubble
+  if (state.hasCam && state.camOn && camVid.videoWidth) {
+    const size = (state.camSize / 100) * Math.min(W, H);
+    const m = Math.min(W, H) * 0.035;
+    let bx = state.camPos.includes("r") ? W - m - size : m;
+    let by = state.camPos.includes("b") ? H - m - size : m;
+
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = size * 0.18;
+    ctx.shadowOffsetY = size * 0.05;
+    if (state.camShape === "circle") {
+      ctx.beginPath();
+      ctx.arc(bx + size / 2, by + size / 2, size / 2, 0, Math.PI * 2);
+    } else {
+      roundRectPath(ctx, bx, by, size, size, size * 0.18);
+    }
+    ctx.fillStyle = "#000";
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    if (state.camShape === "circle") {
+      ctx.beginPath();
+      ctx.arc(bx + size / 2, by + size / 2, size / 2, 0, Math.PI * 2);
+    } else {
+      roundRectPath(ctx, bx, by, size, size, size * 0.18);
+    }
+    ctx.clip();
+    // cover-fit webcam into square
+    const cw = camVid.videoWidth, ch = camVid.videoHeight;
+    const cs = Math.max(size / cw, size / ch);
+    ctx.drawImage(camVid, bx + (size - cw * cs) / 2, by + (size - ch * cs) / 2, cw * cs, ch * cs);
+    ctx.restore();
+  }
+}
+
+/* ---------------- Playback loop ---------------- */
+function renderLoop() {
+  if (!$("editor").classList.contains("active")) return;
+  if (!state.exporting) {
+    drawFrame(pctx, preview.width, preview.height);
+    updateTransportUI();
+    if (state.playing && screenVid.currentTime >= state.trimEnd - 0.02) {
+      pause();
+      seekTo(state.trimStart);
+    }
+  }
+  requestAnimationFrame(renderLoop);
+}
+
+function play() {
+  if (screenVid.currentTime < state.trimStart || screenVid.currentTime >= state.trimEnd - 0.05) {
+    seekTo(state.trimStart);
+  }
+  screenVid.play();
+  if (state.camBlob) camVid.play();
+  state.playing = true;
+  $("btnPlay").textContent = "❚❚";
+}
+function pause() {
+  screenVid.pause();
+  if (state.camBlob) camVid.pause();
+  state.playing = false;
+  $("btnPlay").textContent = "▶";
+}
+function seekTo(t) {
+  t = Math.max(0, Math.min(t, state.duration));
+  screenVid.currentTime = t;
+  if (state.camBlob) camVid.currentTime = Math.min(t, camVid.duration || t);
+}
+$("btnPlay").addEventListener("click", () => state.playing ? pause() : play());
+
+function fmtTime(t) {
+  t = Math.max(0, t);
+  return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+}
+
+/* ---------------- Timeline & trim ---------------- */
+const timelineWrap = document.querySelector(".timeline-wrap");
+function updateTransportUI() {
+  const d = state.duration || 1;
+  const rect = timelineWrap.getBoundingClientRect();
+  const w = rect.width;
+  $("tlPlayhead").style.left = `${(screenVid.currentTime / d) * 100}%`;
+  $("tlTrim").style.left = `${(state.trimStart / d) * 100}%`;
+  $("tlTrim").style.width = `${((state.trimEnd - state.trimStart) / d) * 100}%`;
+  $("trimL").style.left = `${(state.trimStart / d) * w - 7}px`;
+  $("trimR").style.left = `${(state.trimEnd / d) * w - 7}px`;
+  $("timecode").textContent = `${fmtTime(screenVid.currentTime)} / ${fmtTime(state.trimEnd - state.trimStart)}`;
+}
+
+$("timeline").addEventListener("pointerdown", (e) => {
+  const rect = $("timeline").getBoundingClientRect();
+  const seek = (ev) => {
+    const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+    seekTo(frac * state.duration);
+  };
+  seek(e);
+  const move = (ev) => seek(ev);
+  const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+
+function bindTrim(handleId, key, other) {
+  $(handleId).addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    const rect = $("timeline").getBoundingClientRect();
+    const move = (ev) => {
+      const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+      let t = frac * state.duration;
+      if (key === "trimStart") t = Math.min(t, state.trimEnd - 0.2);
+      else t = Math.max(t, state.trimStart + 0.2);
+      state[key] = t;
+      seekTo(t);
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+bindTrim("trimL", "trimStart");
+bindTrim("trimR", "trimEnd");
+
+/* ---------------- Style controls ---------------- */
+document.querySelectorAll("#aspectSeg button").forEach(b =>
+  b.addEventListener("click", () => setAspect(b.dataset.a)));
+
+const bgGrid = $("bgGrid");
+BG_PRESETS.forEach((p, i) => {
+  const el = document.createElement("div");
+  el.className = "bg-swatch" + (i === 0 ? " on" : "");
+  el.style.background = p.type === "solid" ? p.color
+    : `linear-gradient(${p.angle}deg, ${p.stops.join(",")})`;
+  el.addEventListener("click", () => {
+    state.bg = p;
+    document.querySelectorAll(".bg-swatch").forEach(s => s.classList.remove("on"));
+    el.classList.add("on");
+  });
+  bgGrid.appendChild(el);
+});
+$("bgColor").addEventListener("input", (e) => {
+  state.bg = { type: "solid", color: e.target.value };
+  document.querySelectorAll(".bg-swatch").forEach(s => s.classList.remove("on"));
+});
+$("bgImage").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => {
+    state.bgImageEl = img;
+    state.bg = { type: "image" };
+    document.querySelectorAll(".bg-swatch").forEach(s => s.classList.remove("on"));
+  };
+  img.src = URL.createObjectURL(f);
+});
+
+const bindRange = (id, key) => $(id).addEventListener("input", e => state[key] = +e.target.value);
+bindRange("ctlPad", "pad");
+bindRange("ctlRadius", "radius");
+bindRange("ctlShadow", "shadow");
+bindRange("ctlInset", "inset");
+bindRange("ctlCamSize", "camSize");
+$("ctlCamOn").addEventListener("change", e => state.camOn = e.target.checked);
+$("ctlCamPos").addEventListener("change", e => state.camPos = e.target.value);
+$("ctlCamShape").addEventListener("change", e => state.camShape = e.target.value);
+
+$("btnNew").addEventListener("click", () => {
+  pause();
+  location.reload();
+});
+
+/* ---------------- Export ---------------- */
+const FORMATS = [];
+(function detectFormats() {
+  const tryF = (mime, label, ext) => {
+    if (MediaRecorder.isTypeSupported(mime)) FORMATS.push({ mime, label, ext });
+  };
+  tryF("video/mp4;codecs=avc1.640028,mp4a.40.2", "MP4 (H.264)", "mp4");
+  tryF("video/mp4", "MP4", "mp4");
+  tryF("video/webm;codecs=vp9,opus", "WebM (VP9)", "webm");
+  tryF("video/webm", "WebM", "webm");
+  // de-dup by ext
+  const seen = new Set();
+  const uniq = FORMATS.filter(f => !seen.has(f.ext) && seen.add(f.ext));
+  FORMATS.length = 0; FORMATS.push(...uniq);
+  FORMATS.push({ mime: "gif", label: "GIF (no audio)", ext: "gif" });
+  FORMATS.forEach((f, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = f.label;
+    $("expFormat").appendChild(o);
+  });
+})();
+
+function setProgress(frac, label) {
+  $("exportProgress").style.display = "block";
+  $("progFill").style.width = `${Math.round(frac * 100)}%`;
+  $("progLabel").textContent = label;
+}
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
+
+function makeExportCanvas() {
+  const targetH = +$("expRes").value;
+  const c = document.createElement("canvas");
+  if (state.aspect >= 1) { c.height = targetH; c.width = Math.round(targetH * state.aspect); }
+  else { c.width = targetH; c.height = Math.round(targetH / state.aspect); }
+  // even dimensions for encoders
+  c.width += c.width % 2; c.height += c.height % 2;
+  return c;
+}
+
+$("btnExport").addEventListener("click", async () => {
+  if (state.exporting) return;
+  const fmt = FORMATS[+$("expFormat").value];
+  pause();
+  state.exporting = true;
+  $("btnExport").disabled = true;
+  try {
+    if (fmt.ext === "gif") await exportGif();
+    else await exportVideo(fmt);
+    setProgress(1, "Done! Check your downloads.");
+  } catch (err) {
+    setProgress(0, "Export failed: " + err.message);
+    console.error(err);
+  } finally {
+    state.exporting = false;
+    $("btnExport").disabled = false;
+    setTimeout(() => { $("exportProgress").style.display = "none"; }, 4000);
+  }
+});
+
+function seekAndWait(el, t) {
+  return new Promise((resolve) => {
+    if (Math.abs(el.currentTime - t) < 0.01) { resolve(); return; }
+    const timeout = setTimeout(() => { el.onseeked = null; resolve(); }, 800);
+    el.onseeked = () => { el.onseeked = null; clearTimeout(timeout); resolve(); };
+    el.currentTime = t;
+  });
+}
+
+function wireExportAudio() {
+  if (!state.hasAudio) return [];
+  if (!state.audioWired) {
+    state.audioCtx = new AudioContext();
+    const src = state.audioCtx.createMediaElementSource(screenVid);
+    state.audioDest = state.audioCtx.createMediaStreamDestination();
+    src.connect(state.audioDest);
+    src.connect(state.audioCtx.destination); // keep preview audible
+    state.audioWired = true;
+  }
+  state.audioCtx.resume();
+  return state.audioDest.stream.getAudioTracks();
+}
+
+async function exportVideo(fmt) {
+  const canvas = makeExportCanvas();
+  const ctx = canvas.getContext("2d");
+  const stream = canvas.captureStream(60);
+  wireExportAudio().forEach(t => stream.addTrack(t));
+
+  const rec = new MediaRecorder(stream, { mimeType: fmt.mime, videoBitsPerSecond: 10_000_000 });
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  const done = new Promise(r => rec.onstop = r);
+
+  // seek to trim start, wait ready
+  await seekAndWait(screenVid, state.trimStart);
+  if (state.camBlob) await seekAndWait(camVid, Math.min(state.trimStart, camVid.duration || state.trimStart));
+
+  rec.start(500);
+  screenVid.play();
+  if (state.camBlob) camVid.play();
+
+  const total = state.trimEnd - state.trimStart;
+  await new Promise((resolve) => {
+    const tick = () => {
+      if (screenVid.currentTime >= state.trimEnd || screenVid.ended) { resolve(); return; }
+      drawFrame(ctx, canvas.width, canvas.height);
+      setProgress((screenVid.currentTime - state.trimStart) / total, `Rendering ${fmt.label}… ${Math.round(((screenVid.currentTime - state.trimStart) / total) * 100)}%`);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+
+  screenVid.pause();
+  if (state.camBlob) camVid.pause();
+  rec.stop();
+  await done;
+  const blob = new Blob(chunks, { type: fmt.mime.split(";")[0] });
+  download(blob, `studio-recording.${fmt.ext}`);
+}
+
+/* ---------------- GIF export (gif.js from CDN, worker via blob) ---------------- */
+let gifLibPromise = null;
+function loadGifLib() {
+  if (gifLibPromise) return gifLibPromise;
+  gifLibPromise = (async () => {
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js";
+      s.onload = res; s.onerror = () => rej(new Error("Could not load GIF encoder (needs internet)"));
+      document.head.appendChild(s);
+    });
+    const workerText = await (await fetch("https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js")).text();
+    return URL.createObjectURL(new Blob([workerText], { type: "application/javascript" }));
+  })();
+  return gifLibPromise;
+}
+
+async function exportGif() {
+  const workerUrl = await loadGifLib();
+  const canvas = makeExportCanvas();
+  // cap GIF width for sane file sizes
+  const maxW = 720;
+  if (canvas.width > maxW) {
+    const s = maxW / canvas.width;
+    canvas.width = Math.round(canvas.width * s);
+    canvas.height = Math.round(canvas.height * s);
+  }
+  const ctx = canvas.getContext("2d");
+
+  const fps = 12;
+  const total = state.trimEnd - state.trimStart;
+  const frames = Math.min(Math.floor(total * fps), 12 * 60); // cap 60s worth
+  const gif = new GIF({ workers: 3, quality: 12, workerScript: workerUrl, width: canvas.width, height: canvas.height });
+
+  for (let i = 0; i < frames; i++) {
+    const t = state.trimStart + i / fps;
+    await seekAndWait(screenVid, t);
+    if (state.camBlob) await seekAndWait(camVid, Math.min(t, camVid.duration || t));
+    drawFrame(ctx, canvas.width, canvas.height);
+    gif.addFrame(ctx, { copy: true, delay: 1000 / fps });
+    setProgress((i / frames) * 0.6, `Capturing frames… ${Math.round((i / frames) * 100)}%`);
+  }
+
+  const blob = await new Promise((resolve) => {
+    gif.on("progress", p => setProgress(0.6 + p * 0.4, `Encoding GIF… ${Math.round(p * 100)}%`));
+    gif.on("finished", resolve);
+    gif.render();
+  });
+  download(blob, "studio-recording.gif");
+}
+</script>
+</body>
+</html>

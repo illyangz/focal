@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: transparent; cursor: crosshair; user-select: none; font-family: -apple-system, sans-serif; }
+  #dim { position: fixed; inset: 0; background: rgba(0,0,0,.35); }
+  #hint { position: fixed; top: 26px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,20,24,.9); color: #f2f2f5; padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; border: 1px solid rgba(255,255,255,.15); pointer-events: none; }
+  #sel { position: fixed; display: none; border: 1.5px solid #49d34c;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.45); }
+  #dims { position: fixed; display: none; background: rgba(20,20,24,.9); color: #f2f2f5;
+    font-size: 11.5px; padding: 3px 7px; border-radius: 5px; pointer-events: none; white-space: nowrap; }
+  #toolbar { position: fixed; display: none; gap: 8px; background: rgba(20,20,24,.95);
+    border: 1px solid rgba(255,255,255,.15); border-radius: 10px; padding: 8px; }
+  #toolbar button { font-family: inherit; font-size: 12.5px; font-weight: 600; border: none;
+    border-radius: 7px; padding: 8px 14px; cursor: pointer; }
+  #btnUse { background: #49d34c; color: #0c0c0f; }
+  #btnUse:hover { background: #5ce65f; }
+  #btnRetry { background: #2a2a33; color: #f2f2f5; }
+  #btnRetry:hover { background: #34343f; }
+</style>
+</head>
+<body>
+  <div id="dim"></div>
+  <div id="hint">Drag to select the area to record &nbsp;·&nbsp; Esc to cancel</div>
+  <div id="sel"></div>
+  <div id="dims"></div>
+  <div id="toolbar">
+    <button id="btnUse">Use This Area (Enter)</button>
+    <button id="btnRetry">Redo</button>
+  </div>
+<script>
+  const dim = document.getElementById("dim");
+  const hint = document.getElementById("hint");
+  const sel = document.getElementById("sel");
+  const dims = document.getElementById("dims");
+  const toolbar = document.getElementById("toolbar");
+
+  let dragging = false, startX = 0, startY = 0;
+  let rect = null; // {x,y,width,height} finalized
+
+  function resetToIdle() {
+    rect = null;
+    sel.style.display = "none";
+    dims.style.display = "none";
+    toolbar.style.display = "none";
+    dim.style.display = "block";
+    hint.style.display = "block";
+  }
+
+  function showDims(x, y, w, h) {
+    dims.style.display = "block";
+    dims.textContent = `${Math.round(w)} × ${Math.round(h)}`;
+    let dx = x, dy = y - 22;
+    if (dy < 0) dy = y + h + 6;
+    dims.style.left = dx + "px";
+    dims.style.top = dy + "px";
+  }
+
+  function applySelRect(x, y, w, h) {
+    sel.style.display = "block";
+    sel.style.left = x + "px";
+    sel.style.top = y + "px";
+    sel.style.width = w + "px";
+    sel.style.height = h + "px";
+    showDims(x, y, w, h);
+  }
+
+  function showToolbar(x, y, w, h) {
+    toolbar.style.display = "flex";
+    // place below the selection, or above if it would go off-screen
+    const tbH = 42;
+    let ty = y + h + 10;
+    if (ty + tbH > window.innerHeight) ty = y - tbH - 10;
+    if (ty < 0) ty = Math.max(4, y + 4);
+    let tx = x + w / 2 - 90;
+    tx = Math.max(6, Math.min(tx, window.innerWidth - 186));
+    toolbar.style.left = tx + "px";
+    toolbar.style.top = ty + "px";
+  }
+
+  window.addEventListener("mousedown", (e) => {
+    if (e.target.closest("#toolbar")) return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    toolbar.style.display = "none";
+    hint.style.display = "none";
+    applySelRect(startX, startY, 0, 0);
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const x = Math.min(startX, e.clientX), y = Math.min(startY, e.clientY);
+    const w = Math.abs(e.clientX - startX), h = Math.abs(e.clientY - startY);
+    applySelRect(x, y, w, h);
+  });
+
+  window.addEventListener("mouseup", (e) => {
+    if (!dragging) return;
+    dragging = false;
+    const x = Math.min(startX, e.clientX), y = Math.min(startY, e.clientY);
+    const w = Math.abs(e.clientX - startX), h = Math.abs(e.clientY - startY);
+    if (w < 12 || h < 12) { resetToIdle(); return; }
+    rect = { x, y, width: w, height: h };
+    applySelRect(x, y, w, h);
+    showToolbar(x, y, w, h);
+  });
+
+  document.getElementById("btnUse").addEventListener("click", () => {
+    if (rect) window.overlay.done(rect);
+  });
+  document.getElementById("btnRetry").addEventListener("click", resetToIdle);
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && rect) window.overlay.done(rect);
+    else if (e.key === "Escape") {
+      if (rect) resetToIdle();
+      else window.overlay.cancel();
+    }
+  });
+</script>
+</body>
+</html>

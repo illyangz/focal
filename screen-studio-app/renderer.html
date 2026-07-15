@@ -1,0 +1,2547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Focal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+  :root {
+    --bg: #0c0c0f; --panel: #17171c; --panel2: #1f1f26; --border: #2a2a33;
+    --text: #f2f2f5; --muted: #9a9aa5; --accent: #49d34c; --accent2: #32381f;
+    --danger: #e74c3c; --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { font-family: 'JetBrains Mono', monospace;
+    background: var(--bg); color: var(--text); overflow: hidden; }
+  .screen { display: none; height: 100vh; }
+  .screen.active { display: flex; }
+
+  /* ---------- Setup ---------- */
+  #setup { flex-direction: column; align-items: center; justify-content: flex-start; gap: 18px; padding: 36px 30px; overflow-y: auto; }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-mark { width: 44px; height: 44px; border-radius: 12px;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center; }
+  .logo-mark img { width: 26px; height: 26px; display: block; }
+  .logo h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+  .tagline { color: var(--muted); font-size: 14px; margin-top: -12px; }
+  .src-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; width: min(1060px, 92vw); }
+  .src-card { background: var(--panel); border: 2px solid var(--border); border-radius: var(--radius);
+    padding: 10px; cursor: pointer; transition: all .15s; min-width: 0; }
+  .src-card .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .src-card:hover { border-color: #3d3d4a; }
+  .src-card.on { border-color: var(--accent); background: #1a2418; }
+  .src-card img { width: 100%; border-radius: 6px; display: block; }
+  .src-card .name { font-size: 13px; font-weight: 600; margin-top: 8px; text-align: center; color: var(--muted); }
+  .options { display: flex; gap: 12px; }
+  .opt { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 20px; width: 140px; cursor: pointer; text-align: center; transition: all .15s; user-select: none; }
+  .opt:hover { border-color: #3d3d4a; }
+  .opt.on { border-color: var(--accent); background: #1a2418; }
+  .opt .ico { font-size: 22px; margin-bottom: 6px; }
+  .opt .name { font-size: 13px; font-weight: 600; }
+  .opt .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .btn { border: none; border-radius: 10px; padding: 13px 30px; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: all .15s; font-family: inherit; }
+  .btn-primary { background: var(--accent); color: #0c0c0f; }
+  .btn-primary:hover { background: #5ce65f; }
+  .btn-ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: #3d3d4a; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { color: var(--muted); font-size: 12.5px; max-width: 520px; text-align: center; line-height: 1.5; }
+  #err { color: #ff8a80; font-size: 13px; display: none; max-width: 480px; text-align: center; }
+
+  /* ---------- Recording ---------- */
+  #recording { flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
+  .rec-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--danger); display: inline-block;
+    animation: pulse 1.2s infinite; margin-right: 10px; vertical-align: middle; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  #recTimer { font-size: 52px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #countdown { font-size: 120px; font-weight: 800; color: var(--accent); }
+
+  /* ---------- Editor ---------- */
+  #editor { flex-direction: row; }
+  .stage { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .stage-canvas-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; min-height: 0; }
+  #preview { max-width: 100%; max-height: 100%; border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5); background: #000; }
+  .transport { display: flex; align-items: center; gap: 14px; padding: 14px 24px 20px; }
+  .tbtn { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--panel2); color: var(--text); font-size: 16px; cursor: pointer; flex-shrink: 0; }
+  .tbtn:hover { border-color: var(--accent); }
+  .timeline-wrap { flex: 1; display: flex; gap: 8px; height: 170px; min-width: 0; }
+  .tl-labels { width: 78px; flex-shrink: 0; padding-top: 2px; display: flex; flex-direction: column; gap: 2px; }
+  .tl-label { height: 26px; display: flex; align-items: center; font-size: 10.5px; color: var(--muted);
+    user-select: none; white-space: nowrap; }
+  .tl-track { position: relative; flex: 1; min-width: 0; }
+  #timeline { position: absolute; inset: 0; border: 1px solid var(--border);
+    border-radius: 10px; cursor: pointer; overflow: hidden; background: #121217; }
+  .tl-row { position: absolute; left: 0; right: 0; height: 26px;
+    background: rgba(255,255,255,0.035); pointer-events: none; }
+  #vidClip { position: absolute; top: 2px; height: 26px; left: 0; width: 100%;
+    background: linear-gradient(180deg, #2c2c3c, #232331); border: 1px solid #3b3b4e; border-radius: 6px;
+    display: flex; align-items: center; padding: 0 10px; gap: 6px; font-size: 11px; color: #c9c9d6;
+    pointer-events: none; overflow: hidden; white-space: nowrap; box-sizing: border-box; }
+  #tlDimL, #tlDimR { position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,0.5);
+    pointer-events: none; z-index: 3; }
+  #tlDimL { left: 0; }
+  #tlDimR { right: 0; }
+  #tlPlayhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; pointer-events: none; z-index: 4; }
+  .lane-block { position: absolute; height: 22px; border-radius: 5px; opacity: .88; cursor: pointer; z-index: 2; }
+  .lane-block:hover { opacity: 1; outline: 1px solid #fff; }
+  .lane-block.sel { opacity: 1; outline: 1.5px solid #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.15); }
+  .zoom-block { top: 60px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .cam-block { top: 88px; background: linear-gradient(90deg, #00b894, #55efc4); }
+  .ov-slide { top: 116px; background: linear-gradient(90deg, #0984e3, #74b9ff); }
+  .ov-note { top: 116px; background: linear-gradient(90deg, #f39c12, #fdcb6e); }
+  .ov-image { top: 116px; background: linear-gradient(90deg, #e17055, #fab1a0); }
+  .ov-broll { top: 116px; background: linear-gradient(90deg, #e84393, #fd79a8); }
+  .mask-block { top: 144px; background: repeating-linear-gradient(45deg, #636e72, #636e72 6px, #95a5a6 6px, #95a5a6 12px); }
+  .cut-block { top: 2px; height: 26px; opacity: .92;
+    background: repeating-linear-gradient(45deg, rgba(231,76,60,.9), rgba(231,76,60,.9) 6px, rgba(176,58,46,.9) 6px, rgba(176,58,46,.9) 12px); }
+  #tlWave { position: absolute; top: 30px; left: 0; width: 100%; height: 26px; pointer-events: none; z-index: 1; }
+  .trim-handle { position: absolute; top: 0; bottom: 0; width: 14px; cursor: ew-resize; z-index: 5;
+    display: flex; align-items: center; justify-content: center; }
+  .trim-handle::after { content: ""; width: 4px; height: 20px; border-radius: 2px; background: var(--accent2); }
+  #timecode { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 96px; text-align: right; }
+
+  .sidebar { width: 320px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--border);
+    overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 22px; }
+  .sidebar h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .row label { font-size: 13px; }
+  .row input[type=range] { width: 140px; accent-color: var(--accent); }
+  .row select, .row input[type=color] { background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-family: inherit; font-size: 13px; }
+  .row input[type=color] { width: 42px; height: 30px; padding: 2px; cursor: pointer; }
+  .bg-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .bg-swatch { aspect-ratio: 1; border-radius: 8px; cursor: pointer; border: 2px solid transparent; }
+  .bg-swatch.on { border-color: #fff; }
+  .seg { display: flex; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; background: none; border: none; color: var(--muted); padding: 8px 4px;
+    font-size: 12.5px; cursor: pointer; font-family: inherit; font-weight: 600; }
+  .seg button.on { background: var(--accent); color: #0c0c0f; }
+  .switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .sl { position: absolute; inset: 0; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 22px; cursor: pointer; transition: .15s; }
+  .switch .sl::before { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--muted); top: 2px; left: 2px; transition: .15s; }
+  .switch input:checked + .sl { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .sl::before { background: #fff; transform: translateX(16px); }
+  .mini-btns { display: flex; gap: 8px; }
+  .mini-btns .btn { padding: 8px 10px; font-size: 12px; flex: 1; }
+  .note { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 8px; }
+  .export-box { border-top: 1px solid var(--border); padding-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .export-box .btn { width: 100%; }
+  #exportProgress { display: none; }
+  .prog-track { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .prog-fill { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
+  #progLabel { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1px solid var(--border); }
+  .topbar .logo-mark { width: 28px; height: 28px; border-radius: 8px; background: #fff; }
+  .topbar .logo-mark img { width: 16px; height: 16px; display: block; }
+  .topbar-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ============ SETUP ============ -->
+<div id="setup" class="screen active">
+  <div class="logo"><div class="logo-mark"><img src="build/Video Icons.png" alt=""></div><h1>Focal</h1></div>
+  <p class="tagline">Beautiful screen recordings with automatic zoom.</p>
+  <div class="src-grid" id="srcGrid"></div>
+  <div id="cropPanel" style="display:none; width:min(1060px, 92vw); background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px;">
+    <div class="row" style="margin-bottom:0;">
+      <label>Record a custom area</label>
+      <label class="switch"><input type="checkbox" id="ctlCropOn"><span class="sl"></span></label>
+    </div>
+    <div id="cropInfo" style="display:none; align-items:center; gap:10px; margin-top:10px;">
+      <span style="font-size:12.5px; color:var(--muted);">Area: <b id="cropDims" style="color:var(--text);">—</b></span>
+      <button class="btn btn-ghost" id="btnCropReselect" style="padding:6px 12px; font-size:12px;">✂ Reselect</button>
+    </div>
+    <p class="note" style="margin-top:8px;">Only the selected area is recorded. Must be chosen now — it can't be changed once recording starts.</p>
+  </div>
+  <div class="options">
+    <div class="opt" id="optCam"><div class="ico">🤳</div><div class="name">Webcam</div><div class="sub">Overlay bubble</div></div>
+    <div class="opt" id="optMic"><div class="ico">🎙️</div><div class="name">Microphone</div><div class="sub">Voiceover</div></div>
+  </div>
+  <div id="devRow" style="display:flex; gap:12px;">
+    <select id="selCam" style="display:none; max-width:220px; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; font-family:inherit; font-size:12.5px;"></select>
+    <select id="selMic" style="display:none; max-width:220px; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; font-family:inherit; font-size:12.5px;"></select>
+  </div>
+  <div id="livePreviews" style="display:flex; gap:18px; align-items:center; min-height:0;">
+    <video id="camPreview" autoplay muted playsinline
+      style="display:none; width:230px; aspect-ratio:16/10; object-fit:cover; border-radius:12px; border:1px solid var(--border); background:#000; transform:scaleX(-1);"></video>
+    <div id="micWrap" style="display:none; flex-direction:column; gap:6px; align-items:center;">
+      <canvas id="micWave" width="260" height="64"
+        style="background:var(--panel); border:1px solid var(--border); border-radius:10px;"></canvas>
+      <span id="micLabel" style="font-size:11.5px;color:var(--muted);">Waiting for sound…</span>
+    </div>
+  </div>
+  <div style="display:flex; gap:12px; align-items:center;">
+    <button class="btn btn-primary" id="btnStart">● &nbsp;Start Recording</button>
+    <button class="btn btn-ghost" id="btnImport" style="padding:12px 18px;font-size:13px;">📂 Open a video file…</button>
+    <button class="btn btn-ghost" id="btnRestore" style="display:none; padding:12px 18px;font-size:13px;">↩ Restore last recording</button>
+    <input type="file" id="importFile" accept="video/*" style="display:none">
+  </div>
+  <p class="hint">
+    Recording starts after a 3-second countdown and this window minimizes.
+    Press <b>⌘⇧S</b> (Ctrl+Shift+S) anywhere to stop, or come back to this window.
+    Clicks are detected for automatic zoom — macOS will ask for Screen Recording and Accessibility permissions on first run.
+  </p>
+  <p id="err"></p>
+</div>
+
+<!-- ============ RECORDING ============ -->
+<div id="recording" class="screen">
+  <div id="countdown" style="display:none">3</div>
+  <div id="recLive" style="display:none; flex-direction:column; align-items:center; gap:24px;">
+    <div><span class="rec-dot"></span><span style="color:var(--muted);font-size:14px;">Recording…</span></div>
+    <div id="recTimer">00:00</div>
+    <button class="btn btn-danger" id="btnStop">■ &nbsp;Stop Recording</button>
+    <p class="hint">Or press ⌘⇧S / Ctrl+Shift+S from any app.</p>
+  </div>
+</div>
+
+<!-- ============ EDITOR ============ -->
+<div id="editor" class="screen">
+  <div class="stage">
+    <div class="topbar">
+      <div class="topbar-title"><div class="logo-mark"><img src="build/Video Icons.png" alt=""></div> Focal — Editor</div>
+      <button class="btn btn-ghost" id="btnNew" style="padding:8px 16px;font-size:13px;">← New recording</button>
+    </div>
+    <div class="stage-canvas-wrap"><canvas id="preview"></canvas></div>
+    <div class="transport">
+      <button class="tbtn" id="btnPlay">▶</button>
+      <div class="timeline-wrap">
+        <div class="tl-labels">
+          <div class="tl-label">🎬 Video</div>
+          <div class="tl-label">🔊 Audio</div>
+          <div class="tl-label">🔍 Zoom</div>
+          <div class="tl-label">📷 Camera</div>
+          <div class="tl-label">💬 Overlays</div>
+          <div class="tl-label">▦ Masks</div>
+        </div>
+        <div class="tl-track">
+          <div id="timeline">
+            <div class="tl-row" style="top:2px"></div>
+            <div class="tl-row" style="top:30px"></div>
+            <div class="tl-row" style="top:58px"></div>
+            <div class="tl-row" style="top:86px"></div>
+            <div class="tl-row" style="top:114px"></div>
+            <div class="tl-row" style="top:142px"></div>
+            <div id="vidClip">🎬 <span id="vidClipLabel">Screen recording</span></div>
+            <canvas id="tlWave"></canvas>
+            <div id="tlDimL"></div>
+            <div id="tlDimR"></div>
+            <div id="tlPlayhead"></div>
+          </div>
+          <div class="trim-handle" id="trimL"></div>
+          <div class="trim-handle" id="trimR"></div>
+        </div>
+      </div>
+      <div id="timecode">0:00 / 0:00</div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div>
+      <h3>Zoom</h3>
+      <div class="row">
+        <label>Auto zoom</label>
+        <label class="switch"><input type="checkbox" id="ctlZoomOn" checked><span class="sl"></span></label>
+      </div>
+      <div class="row"><label>Zoom level</label><input type="range" id="ctlZoomLevel" min="130" max="400" value="185"></div>
+      <div class="row">
+        <label>Follow cursor</label>
+        <label class="switch"><input type="checkbox" id="ctlZoomFollow" checked><span class="sl"></span></label>
+      </div>
+      <div class="row"><label>Glide speed</label><input type="range" id="ctlGlide" min="30" max="120" value="65"></div>
+      <div class="mini-btns">
+        <button class="btn btn-ghost" id="btnZoomRegen">↻ Regenerate</button>
+        <button class="btn btn-ghost" id="btnZoomAdd">+ Add at playhead</button>
+      </div>
+      <p class="note" id="zoomNote">Purple blocks on the timeline are zoom moments — click a block to select it (the Zoom level slider then edits just that block), double-click to remove.</p>
+      <p class="note" id="zoomDiag" style="opacity:.75;"></p>
+    </div>
+
+    <div>
+      <h3>Timeline</h3>
+      <div class="mini-btns">
+        <button class="btn btn-ghost" id="btnCut">✂ Cut section</button>
+        <button class="btn btn-ghost" id="btnCamFull" style="display:none;">🎥 Camera full</button>
+      </div>
+      <p class="note">Tracks: video (cuts appear on it in red) · audio waveform · zoom · camera · overlays · masks. Drag blocks to move, drag edges to resize, double-click to remove, click to edit/select. Darkened ends = trimmed off.</p>
+    </div>
+
+    <div>
+      <h3>Overlays</h3>
+      <div class="mini-btns">
+        <button class="btn btn-ghost" id="btnSlide">📄 Text slide</button>
+        <button class="btn btn-ghost" id="btnNote">💬 Annotation</button>
+      </div>
+      <div class="mini-btns" style="margin-top:8px;">
+        <button class="btn btn-ghost" id="btnImg">🖼 Image</button>
+        <button class="btn btn-ghost" id="btnBroll">🎞 Video clip</button>
+      </div>
+      <div class="row" style="margin-top:10px;"><label>Enter/exit animation</label>
+        <select id="ctlAnim">
+          <option value="fade">Fade</option><option value="slide">Slide up</option>
+          <option value="scale">Scale</option><option value="none">None</option>
+        </select></div>
+      <p class="note">Slides fill the frame with text; annotations are draggable labels; images and video clips overlay the recording (screenshots, B-roll, intros). All added at the playhead.</p>
+      <input type="file" id="imgFile" accept="image/*" style="display:none">
+      <input type="file" id="brollFile" accept="video/*" style="display:none">
+    </div>
+
+    <div>
+      <h3>Masking</h3>
+      <div class="mini-btns"><button class="btn btn-ghost" id="btnMask">▦ Add mask</button></div>
+      <div class="row" style="margin-top:8px;"><label>Width</label><input type="range" id="ctlMaskW" min="5" max="90" value="25"></div>
+      <div class="row"><label>Height</label><input type="range" id="ctlMaskH" min="4" max="90" value="12"></div>
+      <p class="note">Masks pixelate sensitive areas and track your zooms. Click a gray block to select a mask, then drag the patch on the preview to place it.</p>
+    </div>
+
+    <div>
+      <h3>Cursor</h3>
+      <div class="row">
+        <label>Enhanced cursor</label>
+        <label class="switch"><input type="checkbox" id="ctlCursorOn" checked><span class="sl"></span></label>
+      </div>
+      <div class="row"><label>Size</label><input type="range" id="ctlCursorSize" min="10" max="60" value="26"></div>
+      <div class="row"><label>Smoothing</label><input type="range" id="ctlCursorSmooth" min="0" max="90" value="55"></div>
+      <div class="row">
+        <label>Click highlight</label>
+        <label class="switch"><input type="checkbox" id="ctlClickFx" checked><span class="sl"></span></label>
+      </div>
+      <div class="row">
+        <label>Erase real cursor</label>
+        <label class="switch"><input type="checkbox" id="ctlConceal" checked><span class="sl"></span></label>
+      </div>
+      <div class="row">
+        <label>Hide when idle</label>
+        <label class="switch"><input type="checkbox" id="ctlCursorHide" checked><span class="sl"></span></label>
+      </div>
+      <div class="row">
+        <label>Loop to start</label>
+        <label class="switch"><input type="checkbox" id="ctlCursorLoop"><span class="sl"></span></label>
+      </div>
+      <p class="note">The system cursor baked into the capture is erased each frame (a soft blur at its exact logged position), then re-drawn as vector art — sharp at any size, smoothed, fading when idle, and able to glide home for loopable videos.</p>
+    </div>
+
+    <div>
+      <h3>Canvas</h3>
+      <div class="seg" id="aspectSeg">
+        <button data-a="16:9" class="on">16:9</button>
+        <button data-a="9:16">9:16</button>
+        <button data-a="1:1">1:1</button>
+        <button data-a="4:3">4:3</button>
+      </div>
+    </div>
+
+    <div>
+      <h3>Background</h3>
+      <div class="bg-grid" id="bgGrid"></div>
+      <div class="row" style="margin-top:12px;"><label>Custom color</label><input type="color" id="bgColor" value="#1a1a2e"></div>
+      <div class="row"><label>Image</label><input type="file" id="bgImage" accept="image/*" style="width:140px;font-size:11px;color:var(--muted);"></div>
+    </div>
+
+    <div>
+      <h3>Layout</h3>
+      <div class="row"><label>Padding</label><input type="range" id="ctlPad" min="0" max="22" value="7"></div>
+      <div class="row"><label>Corner radius</label><input type="range" id="ctlRadius" min="0" max="48" value="14"></div>
+      <div class="row"><label>Shadow</label><input type="range" id="ctlShadow" min="0" max="100" value="55"></div>
+      <div class="row"><label>Inset border</label><input type="range" id="ctlInset" min="0" max="20" value="0"></div>
+    </div>
+
+    <div id="camSection" style="display:none;">
+      <h3>Webcam</h3>
+      <div class="row"><label>Show webcam</label>
+        <label class="switch"><input type="checkbox" id="ctlCamOn" checked><span class="sl"></span></label></div>
+      <div class="row"><label>Size</label><input type="range" id="ctlCamSize" min="8" max="45" value="20"></div>
+      <div class="row"><label>Corner preset</label>
+        <select id="ctlCamPos">
+          <option value="br">Bottom right</option><option value="bl">Bottom left</option>
+          <option value="tr">Top right</option><option value="tl">Top left</option>
+        </select></div>
+      <div class="row"><label>Shape</label>
+        <select id="ctlCamShape"><option value="circle">Circle</option><option value="rounded">Rounded</option></select></div>
+      <div class="row"><label>Mirror camera</label>
+        <label class="switch"><input type="checkbox" id="ctlCamMirror" checked><span class="sl"></span></label></div>
+      <p class="note">Or just drag the bubble anywhere on the preview. Mirror shows you the way you see yourself in a mirror (like FaceTime); off = the true camera image.</p>
+    </div>
+
+    <div class="export-box">
+      <h3>Export</h3>
+      <div class="row"><label>Format</label><select id="expFormat"></select></div>
+      <div class="row"><label>Resolution</label>
+        <select id="expRes"><option value="1080">1080p</option><option value="720">720p</option></select></div>
+      <div class="row"><label>Enhance voice</label>
+        <label class="switch"><input type="checkbox" id="ctlEnhance" checked><span class="sl"></span></label></div>
+      <div class="row" id="rowSaveCam" style="display:none;"><label>Also save webcam clip</label>
+        <label class="switch"><input type="checkbox" id="ctlSaveCam"><span class="sl"></span></label></div>
+      <button class="btn btn-primary" id="btnExport">Export Video</button>
+      <button class="btn btn-ghost" id="btnShare" style="display:none;">🔗 Copy shareable link</button>
+      <div id="exportProgress">
+        <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+        <div id="progLabel">Rendering…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Text input dialog (Electron doesn't support window.prompt) -->
+<div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:50; align-items:center; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:22px; width:400px; display:flex; flex-direction:column; gap:14px;">
+    <div id="modalTitle" style="font-size:14px; font-weight:600;"></div>
+    <textarea id="modalInput" rows="3" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:10px; font-family:inherit; font-size:13.5px; resize:vertical;"></textarea>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <span style="font-size:11px; color:var(--muted);">Enter = OK · Shift+Enter = new line</span>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-ghost" id="modalCancel" style="padding:9px 16px;font-size:13px;">Cancel</button>
+        <button class="btn btn-primary" id="modalOk" style="padding:9px 16px;font-size:13px;">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<video id="screenVid" style="display:none" playsinline></video>
+<video id="camVid" style="display:none" playsinline muted></video>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+/* ================= State ================= */
+const state = {
+  source: null, useCam: false, useMic: false,
+  cropRect: null,        // {x,y,width,height} in global DIP coords — custom capture area, screen sources only
+  screenBlob: null, camBlob: null, hasAudio: false, hasCam: false,
+  duration: 0, trimStart: 0, trimEnd: 0,
+  playing: false, exporting: false,
+  // cursor/zoom data
+  cursorEvents: [],      // [{t, x, y, c}] normalized 0..1, t in seconds
+  cursorTrack: [],       // smoothed movement samples
+  clicks: [],            // click events only
+  clicksAvailable: false,
+  zoomSegs: [],          // [{start, end, x, y, z}]
+  // style
+  aspect: 16 / 9, aspectName: "16:9",
+  bg: null, bgImageEl: null,
+  pad: 7, radius: 14, shadow: 55, inset: 0,
+  zoomOn: true, zoomLevel: 1.85, zoomFollow: true, glide: 0.65, selZoom: null,
+  cursorOn: true, cursorSize: 26, cursorSmooth: 55, clickFx: true,
+  cursorAutoHide: true, cursorLoop: false, capCursorHidden: false,
+  concealCursor: true, rawTrack: [],
+  camOn: true, camSize: 20, camPos: "br", camShape: "circle", camMirror: true,
+  camX: null, camY: null, // normalized center when dragged; null = use corner preset
+  camId: "", micId: "",   // selected input devices
+  cutSegs: [], camSegs: [], // cut sections & full-screen camera sections
+  overlaySegs: [],          // slides / annotations / images / b-roll
+  maskSegs: [], selMask: null, // pixelation masks (video-fraction coords)
+  animStyle: "fade",
+  enhanceVoice: true, saveCamClip: false,
+  audioWired: false, audioDest: null, audioCtx: null,
+};
+
+const BG_PRESETS = [
+  { type: "gradient", stops: ["#667eea", "#764ba2"], angle: 135 },
+  { type: "gradient", stops: ["#f093fb", "#f5576c"], angle: 135 },
+  { type: "gradient", stops: ["#4facfe", "#00f2fe"], angle: 135 },
+  { type: "gradient", stops: ["#43e97b", "#38f9d7"], angle: 135 },
+  { type: "gradient", stops: ["#fa709a", "#fee140"], angle: 135 },
+  { type: "gradient", stops: ["#30cfd0", "#330867"], angle: 135 },
+  { type: "gradient", stops: ["#a8edea", "#fed6e3"], angle: 135 },
+  { type: "gradient", stops: ["#ff9a9e", "#fecfef"], angle: 135 },
+  { type: "gradient", stops: ["#0c0c0f", "#2d2d44"], angle: 135 },
+  { type: "gradient", stops: ["#141e30", "#243b55"], angle: 135 },
+  { type: "solid", color: "#111114" },
+  { type: "solid", color: "#f4f4f6" },
+];
+state.bg = BG_PRESETS[0];
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+
+/* ================= Setup screen ================= */
+async function loadSources() {
+  const grid = $("srcGrid");
+  let sources = [];
+  let perm = "granted";
+  try {
+    perm = await window.studio.screenPerm();
+    sources = await window.studio.getSources();
+  } catch (e) {
+    console.error("getSources failed:", e);
+  }
+
+  if (!sources.length) {
+    state.source = null;
+    const denied = perm !== "granted";
+    grid.innerHTML = `
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px;max-width:520px;text-align:center;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px;">${denied ? "Screen Recording permission needed" : "No screens found"}</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px;">
+          ${denied
+            ? "macOS blocks screen capture until you allow it. Click below, enable <b>Electron</b> (or Focal) in the list, then <b>quit and reopen this app</b> — macOS requires a restart after granting."
+            : "Couldn't list your displays. Try again, and check Screen Recording permission in System Settings › Privacy & Security."}
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button class="btn btn-ghost" id="btnOpenPerm" style="padding:9px 16px;font-size:13px;">Open System Settings</button>
+          <button class="btn btn-ghost" id="btnRetrySrc" style="padding:9px 16px;font-size:13px;">↻ Try again</button>
+        </div>
+      </div>`;
+    const op = $("btnOpenPerm"), rt = $("btnRetrySrc");
+    if (op) op.addEventListener("click", () => window.studio.openScreenSettings());
+    if (rt) rt.addEventListener("click", loadSources);
+    return;
+  }
+
+  state.allSources = sources; // kept for post-capture surface matching
+  const selectedId = state.source && state.source.id;
+  grid.innerHTML = "";
+  // screens first, then windows — cap at 8 total (2 rows of 4)
+  const screens = sources.filter(s => s.kind === "screen");
+  const windows = sources.filter(s => s.kind === "window").slice(0, Math.max(0, 8 - screens.length));
+  [...screens, ...windows].forEach((s, i) => {
+    const isSel = selectedId ? s.id === selectedId : i === 0;
+    const card = document.createElement("div");
+    card.className = "src-card" + (isSel ? " on" : "");
+    const icon = s.kind === "screen" ? "🖥️" : "🪟";
+    card.innerHTML = `<img src="${s.thumbnail}"><div class="name">${icon} ${s.name}</div>`;
+    card.addEventListener("click", () => {
+      if (state.source && state.source.id !== s.id) state.cropRect = null;
+      state.source = s;
+      document.querySelectorAll(".src-card").forEach(c => c.classList.remove("on"));
+      card.classList.add("on");
+      updateCropPanel();
+    });
+    grid.appendChild(card);
+    if (isSel) state.source = s;
+  });
+  updateCropPanel();
+}
+loadSources();
+
+/* ---- Custom-area selection (screen sources only) ---- */
+function updateCropPanel() {
+  const isScreen = state.source && state.source.kind === "screen" && state.source.bounds;
+  $("cropPanel").style.display = isScreen ? "block" : "none";
+  if (!isScreen) state.cropRect = null;
+  $("ctlCropOn").checked = !!state.cropRect;
+  $("cropInfo").style.display = state.cropRect ? "flex" : "none";
+  if (state.cropRect) $("cropDims").textContent = `${state.cropRect.width} × ${state.cropRect.height}`;
+}
+
+async function pickCropRegion() {
+  if (!state.source || !state.source.bounds) return false;
+  window.studio.minimize();
+  let rect = null;
+  try { rect = await window.studio.selectRegion(state.source.bounds); }
+  finally { window.studio.restore(); }
+  if (rect) state.cropRect = rect;
+  updateCropPanel();
+  return !!rect;
+}
+
+$("ctlCropOn").addEventListener("change", async (e) => {
+  if (e.target.checked) {
+    const ok = await pickCropRegion();
+    if (!ok) e.target.checked = false, updateCropPanel();
+  } else {
+    state.cropRect = null;
+    updateCropPanel();
+  }
+});
+$("btnCropReselect").addEventListener("click", () => pickCropRegion());
+setInterval(() => { if ($("setup").classList.contains("active") && !state.playing) loadSources(); }, 8000);
+
+/* ---- Live webcam preview & mic waveform ---- */
+let previewCamStream = null, previewMicStream = null, micAnalyser = null, micRaf = null, micAudioCtx = null;
+
+function stopCamPreview() {
+  if (previewCamStream) { previewCamStream.getTracks().forEach(t => t.stop()); previewCamStream = null; }
+  $("camPreview").srcObject = null;
+  $("camPreview").style.display = "none";
+}
+function stopMicPreview() {
+  cancelAnimationFrame(micRaf);
+  micAnalyser = null;
+  if (previewMicStream) { previewMicStream.getTracks().forEach(t => t.stop()); previewMicStream = null; }
+  if (micAudioCtx) { micAudioCtx.close().catch(() => {}); micAudioCtx = null; }
+  $("micWrap").style.display = "none";
+}
+function stopPreviews() { stopCamPreview(); stopMicPreview(); }
+
+function drawWave() {
+  if (!micAnalyser) return;
+  const c = $("micWave"), g = c.getContext("2d");
+  const data = new Uint8Array(micAnalyser.fftSize);
+  micAnalyser.getByteTimeDomainData(data);
+  g.clearRect(0, 0, c.width, c.height);
+  let sum = 0;
+  g.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    const v = (data[i] - 128) / 128;
+    sum += v * v;
+    const x = (i / data.length) * c.width;
+    const y = c.height / 2 + v * (c.height / 2 - 4);
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  const rms = Math.sqrt(sum / data.length);
+  g.strokeStyle = rms > 0.02 ? "#49d34c" : "#9a9aa5";
+  g.lineWidth = 2;
+  g.stroke();
+  const label = $("micLabel");
+  if (rms > 0.02) { label.textContent = "Microphone working ✓"; label.style.color = "#49d34c"; }
+  micRaf = requestAnimationFrame(drawWave);
+}
+
+function camConstraints() {
+  return { width: 1280, height: 720, ...(state.camId ? { deviceId: { exact: state.camId } } : {}) };
+}
+function micConstraints() {
+  return { echoCancellation: true, noiseSuppression: true, ...(state.micId ? { deviceId: { exact: state.micId } } : {}) };
+}
+
+async function fillDevices() {
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const fill = (sel, kind, cur) => {
+      sel.innerHTML = "";
+      devs.filter(d => d.kind === kind).forEach((d, i) => {
+        const o = document.createElement("option");
+        o.value = d.deviceId;
+        o.textContent = d.label || `${kind === "videoinput" ? "Camera" : "Microphone"} ${i + 1}`;
+        sel.appendChild(o);
+      });
+      if (cur) sel.value = cur;
+    };
+    fill($("selCam"), "videoinput", state.camId);
+    fill($("selMic"), "audioinput", state.micId);
+  } catch (e) { /* ignore */ }
+}
+
+async function startCamPreview() {
+  previewCamStream = await navigator.mediaDevices.getUserMedia({ video: camConstraints() });
+  const v = $("camPreview");
+  v.srcObject = previewCamStream;
+  v.style.display = "block";
+  $("selCam").style.display = "block";
+  await fillDevices(); // labels become available once permission is granted
+}
+
+async function startMicPreview() {
+  previewMicStream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() });
+  micAudioCtx = new AudioContext();
+  micAnalyser = micAudioCtx.createAnalyser();
+  micAnalyser.fftSize = 1024;
+  micAudioCtx.createMediaStreamSource(previewMicStream).connect(micAnalyser);
+  const label = $("micLabel");
+  label.textContent = "Waiting for sound — say something…";
+  label.style.color = "var(--muted)";
+  $("micWrap").style.display = "flex";
+  $("selMic").style.display = "block";
+  drawWave();
+  await fillDevices();
+}
+
+$("optCam").addEventListener("click", async () => {
+  state.useCam = !state.useCam;
+  $("optCam").classList.toggle("on", state.useCam);
+  if (state.useCam) {
+    try { await startCamPreview(); }
+    catch (e) {
+      showErr("Webcam not available: " + e.message);
+      state.useCam = false;
+      $("optCam").classList.remove("on");
+    }
+  } else {
+    stopCamPreview();
+    $("selCam").style.display = "none";
+  }
+});
+
+$("optMic").addEventListener("click", async () => {
+  state.useMic = !state.useMic;
+  $("optMic").classList.toggle("on", state.useMic);
+  if (state.useMic) {
+    try { await startMicPreview(); }
+    catch (e) {
+      showErr("Microphone not available: " + e.message);
+      state.useMic = false;
+      $("optMic").classList.remove("on");
+    }
+  } else {
+    stopMicPreview();
+    $("selMic").style.display = "none";
+  }
+});
+
+$("selCam").addEventListener("change", async (e) => {
+  state.camId = e.target.value;
+  if (state.useCam) {
+    stopCamPreview();
+    try { await startCamPreview(); } catch (err) { showErr("Couldn't switch camera: " + err.message); }
+  }
+});
+$("selMic").addEventListener("change", async (e) => {
+  state.micId = e.target.value;
+  if (state.useMic) {
+    stopMicPreview();
+    try { await startMicPreview(); } catch (err) { showErr("Couldn't switch microphone: " + err.message); }
+  }
+});
+
+function showErr(msg) { const e = $("err"); e.textContent = msg; e.style.display = "block"; }
+function switchScreen(name) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  $(name).classList.add("active");
+}
+
+/* ================= Recording ================= */
+let screenStream, camStream, micStream;
+let screenRecorder, camRecorder;
+let screenChunks = [], camChunks = [];
+let recStartWall = 0, timerInterval = null;
+let cropStopFn = null;      // stops the live-crop draw loop, if a custom area is being recorded
+let appliedCropRect = null; // the crop rect actually in effect for the current recording (or null)
+
+function pickMime(cands) {
+  for (const c of cands) if (MediaRecorder.isTypeSupported(c)) return c;
+  return "";
+}
+
+// Draws the live-captured display, cropped to `rect` (global DIP coords),
+// onto a canvas and returns a video track of just that region — this is how
+// a custom capture area is enforced, since desktop capture APIs only expose
+// whole screens/windows. `source` must be the whole-display source (with
+// `bounds`/`scaleFactor` from get-sources) that `rect` was picked against.
+function withTimeout(promise, ms, msg) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(msg)), ms);
+    promise.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+async function buildCropTrack(sourceStream, source, rect) {
+  const track = sourceStream.getVideoTracks()[0];
+  const vid = document.createElement("video");
+  vid.muted = true; vid.playsInline = true;
+  // Some Chromium versions won't reliably drive a MediaStream video element
+  // that's never attached to the document — keep it in the DOM but invisible
+  // rather than risk play()/metadata never firing (which would hang the
+  // whole "Start Recording" flow, since this is awaited before recording begins).
+  Object.assign(vid.style, { position: "fixed", left: "-99999px", top: "0", width: "1px", height: "1px" });
+  document.body.appendChild(vid);
+  vid.srcObject = new MediaStream([track]);
+  await withTimeout(vid.play(), 4000, "crop source video failed to start");
+  if (!vid.videoWidth) {
+    await withTimeout(new Promise((res) => { vid.onloadedmetadata = res; }), 4000, "crop source video metadata timed out");
+  }
+
+  const b = source.bounds;
+  const settings = track.getSettings ? track.getSettings() : {};
+  const scaleX = (settings.width || vid.videoWidth) / b.width;
+  const scaleY = (settings.height || vid.videoHeight) / b.height;
+
+  const sx = Math.round((rect.x - b.x) * scaleX);
+  const sy = Math.round((rect.y - b.y) * scaleY);
+  const sw = Math.max(2, Math.round(rect.width * scaleX));
+  const sh = Math.max(2, Math.round(rect.height * scaleY));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = sw; canvas.height = sh;
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  let raf = null, stopped = false;
+  const draw = () => {
+    if (stopped) return;
+    ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, sw, sh);
+    raf = requestAnimationFrame(draw);
+  };
+  draw();
+
+  const canvasStream = canvas.captureStream(60);
+  return {
+    track: canvasStream.getVideoTracks()[0],
+    stop: () => { stopped = true; cancelAnimationFrame(raf); vid.pause(); vid.srcObject = null; },
+  };
+}
+
+$("btnStart").addEventListener("click", async () => {
+  $("err").style.display = "none";
+  if (!state.source) {
+    showErr("No screen selected — grant Screen Recording permission (see above), restart the app, and pick a screen.");
+    loadSources();
+    return;
+  }
+  stopPreviews();
+
+  let isScreen = state.source.kind !== "window";
+  // Hide the system cursor whenever we can re-draw it from data: always for
+  // screens, and for windows too when window-bounds tracking is available.
+  let winTrack = false;
+  try { winTrack = await window.studio.winTracking(); } catch (e) {}
+  const cursorMode = () => (isScreen || winTrack) ? "never" : "always";
+  const wantCursor = cursorMode();
+  try {
+    window.studio.selectSource(state.source.id);
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      audio: false,
+      video: { frameRate: { ideal: 60 }, cursor: wantCursor },
+    });
+    try {
+      await screenStream.getVideoTracks()[0].applyConstraints({ advanced: [{ cursor: wantCursor }] });
+    } catch (e) { /* cursor constraint unsupported — real cursor stays visible */ }
+
+    // macOS 15's system picker can override our source choice. Trust the
+    // track's actual surface type so cursor tracking & auto-zoom stay correct.
+    try {
+      const track0 = screenStream.getVideoTracks()[0];
+      const surf = (track0.getSettings && track0.getSettings().displaySurface) || "";
+      if (surf) {
+        const actuallyScreen = surf === "monitor";
+        if (actuallyScreen && !isScreen) {
+          // picked a screen in the system picker — find matching display bounds
+          const label = track0.label || "";
+          const screens = (state.allSources || []).filter(s => s.kind === "screen");
+          const prevSource = state.source;
+          state.source =
+            screens.find(s => label.includes(s.name) || s.name.includes(label)) ||
+            screens[0] || state.source;
+          isScreen = !!(state.source && state.source.bounds);
+          // a custom area was picked against a specific display — if the
+          // system picker swapped in a different one, the rect no longer applies
+          if (state.cropRect && state.source !== prevSource) state.cropRect = null;
+        } else if (!actuallyScreen && isScreen) {
+          // picked a window in the system picker — no cursor coordinates
+          state.source = { ...state.source, kind: "window", bounds: null };
+          isScreen = false;
+          state.cropRect = null;
+        }
+      }
+      // re-apply cursor hiding with the corrected surface type
+      await track0.applyConstraints({ advanced: [{ cursor: cursorMode() }] }).catch(() => {});
+    } catch (e) { /* keep original detection */ }
+    state.capCursorHidden = cursorMode() === "never";
+  } catch (e) {
+    // Fallback to the legacy capture path (cursor can't be hidden here)
+    try {
+      screenStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: state.source.id, maxFrameRate: 60 } },
+      });
+    } catch (e2) {
+      showErr("Screen capture failed — check Screen Recording permission in System Settings › Privacy & Security, then restart the app.");
+      return;
+    }
+  }
+
+  try {
+    if (state.useCam || state.useMic) {
+      const constraints = {};
+      if (state.useCam) constraints.video = camConstraints();
+      if (state.useMic) constraints.audio = micConstraints();
+      const um = await navigator.mediaDevices.getUserMedia(constraints);
+      if (state.useCam) camStream = new MediaStream(um.getVideoTracks());
+      if (state.useMic) micStream = new MediaStream(um.getAudioTracks());
+    }
+  } catch (e) {
+    showErr("Webcam/microphone permission denied — recording screen only.");
+  }
+
+  const audioTracks = micStream ? micStream.getAudioTracks() : [];
+  state.hasAudio = audioTracks.length > 0;
+  state.hasCam = !!camStream;
+
+  cropStopFn = null;
+  appliedCropRect = null;
+  let recordVideoTrack = screenStream.getVideoTracks()[0];
+  if (isScreen && state.cropRect && state.source.bounds) {
+    try {
+      const built = await buildCropTrack(screenStream, state.source, state.cropRect);
+      recordVideoTrack = built.track;
+      cropStopFn = built.stop;
+      appliedCropRect = state.cropRect;
+    } catch (e) {
+      console.warn("[studio] crop pipeline failed, recording full screen instead:", e);
+    }
+  }
+
+  const mainStream = new MediaStream([recordVideoTrack, ...audioTracks]);
+  const vidMime = pickMime(["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]);
+
+  screenChunks = []; camChunks = [];
+  screenRecorder = new MediaRecorder(mainStream, { mimeType: vidMime, videoBitsPerSecond: 14_000_000 });
+  screenRecorder.ondataavailable = (e) => { if (e.data.size) screenChunks.push(e.data); };
+
+  if (camStream) {
+    camRecorder = new MediaRecorder(camStream, { mimeType: pickMime(["video/webm;codecs=vp9", "video/webm"]), videoBitsPerSecond: 4_000_000 });
+    camRecorder.ondataavailable = (e) => { if (e.data.size) camChunks.push(e.data); };
+  }
+
+  screenStream.getVideoTracks()[0].addEventListener("ended", () => stopRecording());
+
+  switchScreen("recording");
+  $("countdown").style.display = "block";
+  $("recLive").style.display = "none";
+  for (let n = 3; n >= 1; n--) {
+    $("countdown").textContent = n;
+    await new Promise(r => setTimeout(r, 700));
+  }
+  $("countdown").style.display = "none";
+  $("recLive").style.display = "flex";
+
+  // Always track — cursor data is cheap and the surface type can be
+  // corrected after the fact (system picker overrides, etc.)
+  const trackInfo = await window.studio.trackStart();
+  state.clicksAvailable = trackInfo.clicksAvailable;
+
+  screenRecorder.onstart = () => { recStartWall = Date.now(); };
+  screenRecorder.start(1000);
+  if (camRecorder) camRecorder.start(1000);
+
+  window.studio.minimize();
+
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - recStartWall) / 1000);
+    $("recTimer").textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }, 250);
+});
+
+let stopping = false;
+async function stopRecording() {
+  if (stopping || !screenRecorder || screenRecorder.state === "inactive") return;
+  stopping = true;
+  clearInterval(timerInterval);
+
+  const isScreenRec = state.source.kind !== "window" && state.source.bounds;
+  const liveVideoTrack = screenStream && screenStream.getVideoTracks()[0];
+  const capturedSize = (liveVideoTrack && liveVideoTrack.getSettings) ? liveVideoTrack.getSettings() : {};
+  const trackData = await window.studio.trackStop(); // always stop the poller
+  const rawEvents = trackData.events || trackData || [];
+  const winSamples = trackData.winSamples || [];
+
+  const stopped = (rec) => new Promise(res => { rec.onstop = res; rec.stop(); });
+  await stopped(screenRecorder);
+  if (camRecorder && camRecorder.state !== "inactive") await stopped(camRecorder);
+
+  if (cropStopFn) { cropStopFn(); cropStopFn = null; }
+  [screenStream, camStream, micStream].forEach(s => s && s.getTracks().forEach(t => t.stop()));
+  screenStream = camStream = micStream = null;
+
+  state.screenBlob = new Blob(screenChunks, { type: "video/webm" });
+  state.camBlob = camChunks.length ? new Blob(camChunks, { type: "video/webm" }) : null;
+
+  // Normalize cursor events to recording-relative seconds + 0..1 display coords
+  // (relative to the cropped area when a custom region was recorded)
+  if (isScreenRec) {
+    const b = appliedCropRect || state.source.bounds;
+    state.cursorEvents = rawEvents
+      .map(e => ({
+        t: (e.t - recStartWall) / 1000,
+        x: clamp((e.x - b.x) / b.width, 0, 1),
+        y: clamp((e.y - b.y) / b.height, 0, 1),
+        c: e.c,
+      }))
+      .filter(e => e.t >= 0);
+  } else {
+    // Window recording: map global cursor coords into the recorded window's
+    // space using the active-window bounds sampled during recording.
+    const name = (state.source.name || "").trim();
+    let ws = winSamples.filter(s => s.title && name &&
+      (s.title === name || s.title.includes(name) || name.includes(s.title)));
+    if (!ws.length) ws = winSamples; // fall back: assume active window = recorded window
+    if (ws.length) {
+      // Some apps' captured window frame doesn't cover the full accessibility
+      // window bounds (most commonly: the title bar isn't actually in the
+      // captured pixels even though System Events reports it as part of the
+      // window). Detect that by comparing the live track's real captured
+      // resolution against the reported window size, and shrink the mapped
+      // rect from the top so cursor coordinates line up with the video's
+      // actual content instead of drifting up/off from the real cursor.
+      const mid = ws[Math.floor(ws.length / 2)] || ws[0];
+      let chromeTop = 0;
+      if (capturedSize.width && capturedSize.height && mid.width && mid.height) {
+        const scale = capturedSize.width / mid.width;
+        const diffPx = mid.height * scale - capturedSize.height;
+        if (scale > 0 && Math.abs(diffPx) > 4) chromeTop = diffPx / scale;
+      }
+      state.cursorEvents = rawEvents.map(e => {
+        let best = null;
+        for (const s of ws) {
+          const d = Math.abs(s.t - e.t);
+          if (!best || d < best.d) best = { s, d };
+        }
+        if (!best || best.d > 3000) return null;
+        const b = best.s;
+        const top = b.y + chromeTop, height = b.height - chromeTop;
+        const x = (e.x - b.x) / b.width, y = (e.y - top) / height;
+        // drop moments when the cursor was outside the recorded window
+        if (x < -0.05 || x > 1.05 || y < -0.05 || y > 1.05) return null;
+        return { t: (e.t - recStartWall) / 1000, x: clamp(x, 0, 1), y: clamp(y, 0, 1), c: e.c };
+      }).filter(e => e && e.t >= 0);
+    } else {
+      state.cursorEvents = [];
+    }
+  }
+
+  window.studio.restore();
+  stopping = false;
+
+  // persist for crash/reload recovery (fire-and-forget)
+  (async () => {
+    try {
+      await window.studio.recoverySave("screen.webm", await state.screenBlob.arrayBuffer());
+      if (state.camBlob) await window.studio.recoverySave("cam.webm", await state.camBlob.arrayBuffer());
+      await window.studio.recoverySave("meta.json", new TextEncoder().encode(JSON.stringify({
+        cursorEvents: state.cursorEvents,
+        clicksAvailable: state.clicksAvailable,
+        hasAudio: state.hasAudio,
+        hasCam: state.hasCam,
+        sourceKind: state.source.kind,
+        capCursorHidden: state.capCursorHidden,
+      })).buffer);
+    } catch (e) { console.warn("recovery save failed:", e); }
+  })();
+
+  await openEditor();
+}
+
+/* ---- Restore a recording after an accidental reload or crash ---- */
+(async () => {
+  try {
+    if (await window.studio.recoveryCheck()) $("btnRestore").style.display = "block";
+  } catch (e) {}
+})();
+$("btnRestore").addEventListener("click", async () => {
+  const data = await window.studio.recoveryLoad();
+  if (!data) { showErr("No saved recording found."); return; }
+  stopPreviews();
+  state.screenBlob = new Blob([data.screen], { type: "video/webm" });
+  state.camBlob = data.cam ? new Blob([data.cam], { type: "video/webm" }) : null;
+  let meta = {};
+  try { meta = JSON.parse(data.meta || "{}"); } catch (e) {}
+  state.cursorEvents = meta.cursorEvents || [];
+  state.clicksAvailable = !!meta.clicksAvailable;
+  state.capCursorHidden = !!meta.capCursorHidden;
+  state.hasAudio = meta.hasAudio !== false;
+  state.hasCam = !!state.camBlob;
+  state.source = { id: "recovered", kind: meta.sourceKind || "screen", bounds: null };
+  await openEditor();
+});
+$("btnStop").addEventListener("click", stopRecording);
+window.studio.onHotkeyStop(() => stopRecording());
+
+/* ---- Open an existing video as a project ---- */
+$("btnImport").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  stopPreviews();
+  state.screenBlob = f;
+  state.camBlob = null;
+  state.hasCam = false;
+  state.hasAudio = true; // route whatever audio the file has
+  state.cursorEvents = [];
+  state.clicksAvailable = false;
+  state.source = { id: "import", kind: "import", bounds: null };
+  e.target.value = "";
+  await openEditor();
+});
+
+/* ================= Editor: load media ================= */
+const screenVid = $("screenVid"), camVid = $("camVid");
+const preview = $("preview"), pctx = preview.getContext("2d");
+
+function loadVideo(el, blob) {
+  return new Promise((resolve, reject) => {
+    el.src = URL.createObjectURL(blob);
+    el.onerror = () => reject(new Error("video load failed"));
+    el.onloadedmetadata = async () => {
+      if (!isFinite(el.duration)) {
+        el.currentTime = 1e9;
+        await new Promise(r => { el.onseeked = r; });
+        el.currentTime = 0;
+        await new Promise(r => { el.onseeked = r; });
+      }
+      resolve();
+    };
+  });
+}
+
+async function openEditor() {
+  await loadVideo(screenVid, state.screenBlob);
+  if (state.camBlob) await loadVideo(camVid, state.camBlob);
+
+  state.duration = screenVid.duration;
+  state.trimStart = 0;
+  state.trimEnd = state.duration;
+  state.cutSegs = [];
+  state.camSegs = [];
+  state.overlaySegs = [];
+  state.maskSegs = [];
+  state.selMask = null;
+  $("camSection").style.display = state.camBlob ? "block" : "none";
+  $("btnCamFull").style.display = state.camBlob ? "block" : "none";
+  $("rowSaveCam").style.display = state.camBlob ? "flex" : "none";
+  buildWaveform();
+
+  buildCursorTrack();
+  state.clicks = state.cursorEvents.filter(e => e.c === 1 && e.t <= state.duration);
+  state.zoomSegs = generateAutoZooms();
+  renderZoomBlocks();
+
+  const moveCount = state.cursorEvents.filter(e => e.c === 0).length;
+  $("zoomDiag").textContent =
+    `Diagnostics — surface: ${state.source.kind || "screen"} · cursor samples: ${moveCount} · clicks: ${state.clicks.length} · click hook: ${state.clicksAvailable ? "active" : "OFF (grant Accessibility in System Settings, then restart)"}`;
+
+  const hasCursorData = state.cursorEvents.length > 0;
+  if (!hasCursorData) {
+    // no cursor coordinates available
+    state.cursorOn = false;
+    $("ctlCursorOn").checked = false;
+    $("zoomNote").innerHTML = "No cursor data for this recording — use <b>+ Add at playhead</b>, then <b>double-click the preview</b> to aim the zoom. (Tip: pick <b>Display</b> in the macOS picker, and run <b>npm install</b> in the app folder to enable window tracking.)";
+  } else if (state.source.kind === "window") {
+    $("zoomNote").textContent = "Window recording with full cursor treatment — the baked-in cursor is erased from the video and re-drawn as a smooth vector cursor (window-mapped data).";
+  } else if (!state.clicksAvailable) {
+    $("zoomNote").textContent = "Click detection unavailable (grant Accessibility permission for click-based zooms) — zooms were generated from cursor pauses. Drag blocks to move, drag edges to resize, double-click to remove.";
+  } else {
+    $("zoomNote").textContent = "Purple blocks are zoom moments. Drag to move, drag the edges to stretch/shorten, double-click to remove. Double-click the preview to re-aim a zoom.";
+  }
+
+  setAspect(state.aspectName);
+  switchScreen("editor");
+  seekTo(0);
+  requestAnimationFrame(renderLoop);
+}
+
+/* ================= Cursor track & smoothing ================= */
+function buildCursorTrack() {
+  const moves = state.cursorEvents.filter(e => e.c === 0);
+  state.rawTrack = moves.map(m => ({ t: m.t, x: m.x, y: m.y }));
+  if (!moves.length) { state.cursorTrack = []; return; }
+
+  // Adaptive exponential smoothing: lighter when fast, heavier when slow.
+  // This preserves sharp movements while smoothing jitter at rest.
+  const baseK = 1 - clamp(state.cursorSmooth / 100, 0, 0.95);
+  const fwd = [];
+  let px = moves[0].x, py = moves[0].y;
+  for (let i = 0; i < moves.length; i++) {
+    const m = moves[i];
+    // estimate local speed for adaptive factor
+    let speed = 0;
+    if (i > 0) {
+      const dt = Math.max(1e-3, m.t - moves[i - 1].t);
+      speed = Math.hypot(m.x - moves[i - 1].x, m.y - moves[i - 1].y) / dt;
+    }
+    // fast movement → lighter smoothing (track more closely)
+    // slow/stationary → heavier smoothing (reduce jitter)
+    const adaptive = speed > 0.3 ? baseK * 1.6 : baseK;
+    const k = Math.min(1, adaptive);
+    px += (m.x - px) * k;
+    py += (m.y - py) * k;
+    fwd.push({ t: m.t, x: px, y: py });
+  }
+  // backward pass for zero-phase (removes lag)
+  let bx = fwd[fwd.length - 1].x, by = fwd[fwd.length - 1].y;
+  for (let i = fwd.length - 1; i >= 0; i--) {
+    const m = fwd[i];
+    let speed = 0;
+    if (i < fwd.length - 1) {
+      const dt = Math.max(1e-3, fwd[i + 1].t - m.t);
+      speed = Math.hypot(fwd[i + 1].x - m.x, fwd[i + 1].y - m.y) / dt;
+    }
+    const adaptive = speed > 0.3 ? baseK * 1.6 : baseK;
+    const k = Math.min(1, adaptive);
+    bx += (m.x - bx) * k;
+    by += (m.y - by) * k;
+    fwd[i] = { t: m.t, x: bx, y: by };
+  }
+  state.cursorTrack = fwd;
+}
+
+function cursorAt(t) { return trackAt(state.cursorTrack, t); }
+
+// Catmull-Rom spline interpolation — smooth curves through sample points
+// instead of linear segments. P0,P1,P2,P3 are 4 consecutive samples;
+// returns interpolated position between P1 and P2 at fraction f.
+function catmullRom(p0, p1, p2, p3, f) {
+  const f2 = f * f, f3 = f2 * f;
+  return 0.5 * (
+    (2 * p1) +
+    (-p0 + p2) * f +
+    (2 * p0 - 5 * p1 + 4 * p2 - p3) * f2 +
+    (-p0 + 3 * p1 - 3 * p2 + p3) * f3
+  );
+}
+
+function trackAt(tr, t) {
+  if (!tr || !tr.length) return null;
+  if (t <= tr[0].t) return tr[0];
+  if (t >= tr[tr.length - 1].t) return tr[tr.length - 1];
+  // binary search for the segment
+  let lo = 0, hi = tr.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (tr[mid].t <= t) lo = mid; else hi = mid;
+  }
+  // need 4 points for catmull-rom: P0,P1,P2,P3 where P1=P[lo], P2=P[hi]
+  const i0 = Math.max(0, lo - 1);
+  const i1 = lo;
+  const i2 = hi;
+  const i3 = Math.min(tr.length - 1, hi + 1);
+  const segLen = tr[i2].t - tr[i1].t;
+  const f = segLen > 0 ? (t - tr[i1].t) / segLen : 0;
+  return {
+    t,
+    x: catmullRom(tr[i0].x, tr[i1].x, tr[i2].x, tr[i3].x, f),
+    y: catmullRom(tr[i0].y, tr[i1].y, tr[i2].y, tr[i3].y, f),
+  };
+}
+
+/* ================= Auto-zoom generation ================= */
+function mergeSegs(segs) {
+  segs.sort((a, b) => a.start - b.start);
+  const out = [];
+  for (const s of segs) {
+    const last = out[out.length - 1];
+    if (last && s.start - last.end < 0.7) {
+      const w1 = last.end - last.start, w2 = s.end - s.start;
+      last.x = (last.x * w1 + s.x * w2) / (w1 + w2);
+      last.y = (last.y * w1 + s.y * w2) / (w1 + w2);
+      last.end = Math.max(last.end, s.end);
+    } else {
+      out.push({ ...s });
+    }
+  }
+  return out;
+}
+
+function generateAutoZooms() {
+  const Z = state.zoomLevel;
+  const D = state.duration;
+
+  if (state.clicks.length) {
+    // Cluster clicks that are close in time & space
+    const clusters = [];
+    let cur = null;
+    for (const c of state.clicks) {
+      if (cur && c.t - cur.lastT < 2.2 && Math.hypot(c.x - cur.cx, c.y - cur.cy) < 0.28) {
+        cur.n++;
+        cur.cx += (c.x - cur.cx) / cur.n;
+        cur.cy += (c.y - cur.cy) / cur.n;
+        cur.lastT = c.t;
+      } else {
+        if (cur) clusters.push(cur);
+        cur = { firstT: c.t, lastT: c.t, cx: c.x, cy: c.y, n: 1 };
+      }
+    }
+    if (cur) clusters.push(cur);
+    return mergeSegs(clusters.map(cl => ({
+      start: clamp(cl.firstT - 0.35, 0, D),
+      end: clamp(cl.lastT + 1.7, 0, D),
+      x: cl.cx, y: cl.cy, z: Z,
+    }))).filter(s => s.end - s.start > 0.5);
+  }
+
+  // Dwell fallback: zoom where the cursor pauses after movement
+  const moves = state.cursorEvents.filter(e => e.c === 0);
+  const segs = [];
+  let stillStart = null, sx = 0, sy = 0, sn = 0, lastSegEnd = -10;
+  for (let i = 1; i < moves.length; i++) {
+    const dt = Math.max(1e-3, moves[i].t - moves[i - 1].t);
+    const speed = Math.hypot(moves[i].x - moves[i - 1].x, moves[i].y - moves[i - 1].y) / dt;
+    if (speed < 0.06) {
+      if (stillStart === null) { stillStart = moves[i].t; sx = 0; sy = 0; sn = 0; }
+      sx += moves[i].x; sy += moves[i].y; sn++;
+    } else {
+      if (stillStart !== null && moves[i].t - stillStart > 1.0 && stillStart - lastSegEnd > 1.5) {
+        const end = clamp(Math.min(moves[i].t + 0.4, stillStart + 3.0), 0, state.duration);
+        segs.push({ start: clamp(stillStart - 0.2, 0, state.duration), end, x: sx / sn, y: sy / sn, z: state.zoomLevel });
+        lastSegEnd = end;
+      }
+      stillStart = null;
+    }
+  }
+  if (stillStart !== null && state.duration - stillStart > 1.0 && stillStart - lastSegEnd > 1.5 && sn > 0) {
+    segs.push({ start: clamp(stillStart - 0.2, 0, state.duration), end: Math.min(stillStart + 3.0, state.duration), x: sx / sn, y: sy / sn, z: state.zoomLevel });
+  }
+  return mergeSegs(segs).filter(s => s.end - s.start > 0.5);
+}
+
+/* ================= Zoom camera ================= */
+function segWeight(seg, t, T = state.glide) {
+  if (t < seg.start || t > seg.end) return 0;
+  const a = clamp((t - seg.start) / T, 0, 1);
+  const b = clamp((seg.end - t) / T, 0, 1);
+  return ease(a) * ease(b);
+}
+
+// target of the "virtual camera" at time t (before spring smoothing)
+function zoomTargetAt(t) {
+  if (!state.zoomOn || !state.zoomSegs.length) return { cx: 0.5, cy: 0.5, z: 1 };
+  let sw = 0, cx = 0, cy = 0, z = 0;
+  for (const s of state.zoomSegs) {
+    const w = segWeight(s, t);
+    if (w > 0) { sw += w; cx += s.x * w; cy += s.y * w; z += s.z * w; }
+  }
+  if (sw <= 0) return { cx: 0.5, cy: 0.5, z: 1 };
+  cx /= sw; cy /= sw; z /= sw;
+  const k = Math.min(1, sw);
+  cx = 0.5 + (cx - 0.5) * k;
+  cy = 0.5 + (cy - 0.5) * k;
+  z = 1 + (z - 1) * k;
+
+  // follow the cursor while zoomed: if it leaves the inner region of the
+  // viewport, pan the camera just enough to keep it comfortably in frame
+  if (state.zoomFollow && z > 1.02 && state.cursorTrack.length) {
+    const cp = cursorAt(t);
+    if (cp) {
+      const mX = (0.5 / z) * 0.55, mY = (0.5 / z) * 0.55;
+      if (cp.x < cx - mX) cx = cp.x + mX;
+      else if (cp.x > cx + mX) cx = cp.x - mX;
+      if (cp.y < cy - mY) cy = cp.y + mY;
+      else if (cp.y > cy + mY) cy = cp.y - mY;
+    }
+  }
+  return { cx, cy, z };
+}
+
+// spring-smoothed camera — glides toward the target like a human operator
+const cam = { cx: 0.5, cy: 0.5, z: 1, last: -1 };
+function zoomAt(t) {
+  const tgt = zoomTargetAt(t);
+  const dt = t - cam.last;
+  if (!(dt >= 0) || dt > 0.5) {
+    // scrubbed backwards or jumped — snap
+    cam.cx = tgt.cx; cam.cy = tgt.cy; cam.z = tgt.z;
+  } else if (dt > 0) {
+    const k = 1 - Math.exp(-dt * 9);
+    cam.cx += (tgt.cx - cam.cx) * k;
+    cam.cy += (tgt.cy - cam.cy) * k;
+    cam.z += (tgt.z - cam.z) * k;
+  }
+  cam.last = t;
+  const hx = 0.5 / cam.z, hy = 0.5 / cam.z;
+  return { cx: clamp(cam.cx, hx, 1 - hx), cy: clamp(cam.cy, hy, 1 - hy), z: cam.z };
+}
+
+/* ================= Canvas rendering ================= */
+function setAspect(name) {
+  state.aspectName = name;
+  const [w, h] = name.split(":").map(Number);
+  state.aspect = w / h;
+  const base = 1920;
+  if (state.aspect >= 1) { preview.width = base; preview.height = Math.round(base / state.aspect); }
+  else { preview.height = base; preview.width = Math.round(base * state.aspect); }
+  document.querySelectorAll("#aspectSeg button").forEach(b => b.classList.toggle("on", b.dataset.a === name));
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawBackground(ctx, W, H) {
+  const bg = state.bg;
+  if (bg.type === "image" && state.bgImageEl) {
+    const img = state.bgImageEl;
+    const s = Math.max(W / img.width, H / img.height);
+    ctx.drawImage(img, (W - img.width * s) / 2, (H - img.height * s) / 2, img.width * s, img.height * s);
+  } else if (bg.type === "solid") {
+    ctx.fillStyle = bg.color;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    const a = (bg.angle ?? 135) * Math.PI / 180;
+    const r = Math.sqrt(W * W + H * H) / 2;
+    const g = ctx.createLinearGradient(W / 2 - Math.cos(a) * r, H / 2 - Math.sin(a) * r, W / 2 + Math.cos(a) * r, H / 2 + Math.sin(a) * r);
+    bg.stops.forEach((c, i) => g.addColorStop(i / (bg.stops.length - 1), c));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// max cursor speed in a ±0.5s window (normalized units/sec)
+function cursorLocalSpeed(t) {
+  let maxV = 0, prev = null;
+  for (let o = -0.5; o <= 0.51; o += 0.25) {
+    const p = cursorAt(t + o);
+    if (p && prev) maxV = Math.max(maxV, Math.hypot(p.x - prev.x, p.y - prev.y) / 0.25);
+    prev = p;
+  }
+  return maxV;
+}
+
+function drawCursor(ctx, x, y, size, t) {
+  // click ripple
+  if (state.clickFx) {
+    for (const c of state.clicks) {
+      const age = t - c.t;
+      if (age >= 0 && age < 0.5) {
+        const p = age / 0.5;
+        ctx.beginPath();
+        ctx.arc(x, y, size * (0.6 + p * 2.2), 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(162,155,254,${(1 - p) * 0.8})`;
+        ctx.lineWidth = size * 0.12 * (1 - p);
+        ctx.stroke();
+      }
+    }
+  }
+  // press effect: brief shrink on click
+  let press = 1;
+  for (const c of state.clicks) {
+    const age = t - c.t;
+    if (age >= 0 && age < 0.16) press = Math.min(press, 1 - 0.16 * Math.sin(Math.PI * (age / 0.16)));
+  }
+
+  // macOS-style arrow
+  const s = (size / 24) * press;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, 20.5);
+  ctx.lineTo(4.8, 15.9);
+  ctx.lineTo(7.9, 23.2);
+  ctx.lineTo(10.9, 21.9);
+  ctx.lineTo(7.8, 14.7);
+  ctx.lineTo(14.3, 14.7);
+  ctx.closePath();
+  ctx.fillStyle = "#000";
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1.6;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+  ctx.fill();
+  ctx.restore();
+}
+
+let noteHits = [], maskHits = [], lastExport = null;
+const maskTmp = document.createElement("canvas");
+
+function wrapText(ctx, text, maxW) {
+  const out = [];
+  for (const para of String(text).split(/\n/)) {
+    const words = para.split(/\s+/).filter(Boolean);
+    let line = "";
+    for (const w of words) {
+      const trial = line ? line + " " + w : w;
+      if (ctx.measureText(trial).width > maxW && line) { out.push(line); line = w; }
+      else line = trial;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+function applyOverlayAnim(ctx, w, W, H) {
+  const a = state.animStyle;
+  ctx.globalAlpha = a === "none" ? 1 : w;
+  if (a === "slide") ctx.translate(0, (1 - w) * H * 0.05);
+  if (a === "scale") {
+    ctx.translate(W / 2, H / 2);
+    const s = 0.94 + 0.06 * w;
+    ctx.scale(s, s);
+    ctx.translate(-W / 2, -H / 2);
+  }
+}
+
+function drawOverlays(ctx, W, H, t) {
+  for (const seg of state.overlaySegs) {
+    const w = segWeight(seg, t, 0.4);
+    if (w <= 0) continue;
+    ctx.save();
+    applyOverlayAnim(ctx, w, W, H);
+
+    if (seg.type === "slide") {
+      drawBackground(ctx, W, H);
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#fff";
+      ctx.font = `600 ${Math.round(H * 0.062)}px -apple-system, "Segoe UI", sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,0.4)";
+      ctx.shadowBlur = H * 0.01;
+      const lines = wrapText(ctx, seg.text, W * 0.8);
+      const lh = H * 0.09;
+      const y0 = H / 2 - ((lines.length - 1) * lh) / 2;
+      lines.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * lh));
+    } else if (seg.type === "image" && seg.img) {
+      const s = Math.max(W / seg.img.width, H / seg.img.height);
+      ctx.drawImage(seg.img, (W - seg.img.width * s) / 2, (H - seg.img.height * s) / 2, seg.img.width * s, seg.img.height * s);
+    } else if (seg.type === "broll" && seg.el && seg.el.videoWidth) {
+      const cw = seg.el.videoWidth, ch = seg.el.videoHeight;
+      const s = Math.max(W / cw, H / ch);
+      ctx.drawImage(seg.el, (W - cw * s) / 2, (H - ch * s) / 2, cw * s, ch * s);
+    } else if (seg.type === "note") {
+      ctx.font = `600 ${Math.round(H * 0.034)}px -apple-system, "Segoe UI", sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const tw = ctx.measureText(seg.text).width;
+      const padX = H * 0.028, padY = H * 0.02;
+      const bw = tw + padX * 2, bh = H * 0.034 + padY * 2;
+      const bx = seg.x * W - bw / 2, by = seg.y * H - bh / 2;
+      ctx.shadowColor = "rgba(0,0,0,0.4)";
+      ctx.shadowBlur = H * 0.015;
+      roundRectPath(ctx, bx, by, bw, bh, bh / 2.4);
+      ctx.fillStyle = "rgba(16,16,22,0.9)";
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(162,155,254,0.65)";
+      ctx.lineWidth = Math.max(1.5, H * 0.0025);
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.fillText(seg.text, seg.x * W, seg.y * H);
+      if (ctx === pctx) noteHits.push({ seg, rx: bx, ry: by, rw: bw, rh: bh });
+    }
+    ctx.restore();
+  }
+}
+
+function updateBroll(t) {
+  for (const seg of state.overlaySegs) {
+    if (seg.type !== "broll" || !seg.el) continue;
+    const active = t >= seg.start && t <= seg.end;
+    const local = clamp(t - seg.start, 0, Math.max(0, (seg.el.duration || 0) - 0.05));
+    if (active) {
+      if (state.playing || state.exporting) {
+        if (seg.el.paused) { try { seg.el.currentTime = local; seg.el.play(); } catch (e) {} }
+        else if (Math.abs(seg.el.currentTime - local) > 0.35) seg.el.currentTime = local;
+      } else if (Math.abs(seg.el.currentTime - local) > 0.05) {
+        seg.el.currentTime = local;
+      }
+    } else if (!seg.el.paused) {
+      seg.el.pause();
+    }
+  }
+}
+
+function drawFrame(ctx, W, H) {
+  if (ctx === pctx) { noteHits.length = 0; maskHits.length = 0; }
+  drawBackground(ctx, W, H);
+
+  const vw = screenVid.videoWidth, vh = screenVid.videoHeight;
+  if (!vw) return;
+
+  const t = screenVid.currentTime;
+  const padPx = (state.pad / 100) * Math.min(W, H);
+  const availW = W - padPx * 2, availH = H - padPx * 2;
+  const fit = Math.min(availW / vw, availH / vh);
+  const dw = vw * fit, dh = vh * fit;
+  const dx = (W - dw) / 2, dy = (H - dh) / 2;
+  const rad = (state.radius / 1000) * Math.min(W, H) * 2.2;
+
+  if (state.shadow > 0) {
+    ctx.save();
+    ctx.shadowColor = `rgba(0,0,0,${0.25 + state.shadow / 200})`;
+    ctx.shadowBlur = (state.shadow / 100) * Math.min(W, H) * 0.12;
+    ctx.shadowOffsetY = (state.shadow / 100) * Math.min(W, H) * 0.03;
+    roundRectPath(ctx, dx, dy, dw, dh, rad);
+    ctx.fillStyle = "#000";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // zoomed source rect
+  const view = zoomAt(t);
+  const srcW = vw / view.z, srcH = vh / view.z;
+  const srcX = clamp(view.cx * vw - srcW / 2, 0, vw - srcW);
+  const srcY = clamp(view.cy * vh - srcH / 2, 0, vh - srcH);
+
+  if (ctx === pctx) lastLayout = { dx, dy, dw, dh, srcX, srcY, srcW, srcH, vw, vh };
+
+  ctx.save();
+  roundRectPath(ctx, dx, dy, dw, dh, rad);
+  ctx.clip();
+  ctx.drawImage(screenVid, srcX, srcY, srcW, srcH, dx, dy, dw, dh);
+
+  // Erase the baked-in system cursor: macOS ignores capture-time cursor
+  // hiding, but we know exactly where the cursor was — blur it out.
+  // Uses the SAME smoothed position as the vector cursor so they overlap perfectly.
+  if (state.concealCursor && state.cursorTrack && state.cursorTrack.length) {
+    const cp = cursorAt(t);
+    if (cp) {
+      // widen the patch while the cursor moves fast (log/frame timing skew)
+      const a2 = cursorAt(t - 0.06), b2 = cursorAt(t + 0.06);
+      const speed = (a2 && b2) ? Math.hypot(b2.x - a2.x, b2.y - a2.y) / 0.12 : 0;
+      const grow = 1 + Math.min(2.5, speed * 2);
+      const cxs = dx + ((cp.x * vw - srcX) / srcW) * dw;
+      const cys = dy + ((cp.y * vh - srcY) / srcH) * dh;
+      const p = Math.max(18, vw * 0.016) * (dw / srcW) * grow;
+      let rx = cxs - p * 0.4, ry = cys - p * 0.4, rw2 = p * 1.6, rh2 = p * 1.8;
+      const x2 = Math.min(rx + rw2, dx + dw), y2 = Math.min(ry + rh2, dy + dh);
+      rx = Math.max(rx, dx); ry = Math.max(ry, dy);
+      rw2 = x2 - rx; rh2 = y2 - ry;
+      if (rw2 > 4 && rh2 > 4) {
+        const ow = Math.max(2, Math.round(rw2 / (p / 4)));
+        const oh = Math.max(2, Math.round(rh2 / (p / 4)));
+        maskTmp.width = ow; maskTmp.height = oh;
+        maskTmp.getContext("2d").drawImage(ctx.canvas, rx, ry, rw2, rh2, 0, 0, ow, oh);
+        ctx.drawImage(maskTmp, 0, 0, ow, oh, rx, ry, rw2, rh2); // smoothed upscale = soft smear
+      }
+    }
+  }
+
+  // enhanced cursor (drawn in zoomed space)
+  if (state.cursorOn) {
+    const cp = cursorAt(t);
+    if (cp) {
+      let cxn = cp.x, cyn = cp.y, alpha = 1;
+
+      // auto-hide when idle: fade with local speed (looks ahead, so it
+      // fades back in just before movement resumes)
+      if (state.cursorAutoHide) {
+        alpha = clamp(cursorLocalSpeed(t) / 0.03, 0, 1);
+      }
+
+      // loop: glide back to the starting position near the end
+      if (state.cursorLoop) {
+        const LOOP_T = 0.9;
+        const t0 = state.trimEnd - LOOP_T;
+        if (t >= t0) {
+          const home = cursorAt(state.trimStart);
+          if (home) {
+            const f = ease(clamp((t - t0) / LOOP_T, 0, 1));
+            cxn += (home.x - cxn) * f;
+            cyn += (home.y - cyn) * f;
+            alpha = Math.max(alpha, f);
+          }
+        }
+      }
+
+      if (alpha > 0.02) {
+        const pxv = cxn * vw, pyv = cyn * vh;
+        const cxs = dx + ((pxv - srcX) / srcW) * dw;
+        const cys = dy + ((pyv - srcY) / srcH) * dh;
+        if (cxs >= dx - 40 && cxs <= dx + dw + 40 && cys >= dy - 40 && cys <= dy + dh + 40) {
+          const size = (state.cursorSize / 1000) * Math.min(W, H) * (0.6 + view.z * 0.4);
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          drawCursor(ctx, cxs, cys, size, t);
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  if (state.inset > 0) {
+    ctx.lineWidth = (state.inset / 100) * Math.min(W, H) * 0.04;
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    roundRectPath(ctx, dx, dy, dw, dh, rad);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // pixelation masks (stored in video-fraction coords so they track zooms)
+  for (const m of state.maskSegs) {
+    if (t < m.start || t > m.end) continue;
+    let rx = dx + ((m.x * vw - srcX) / srcW) * dw;
+    let ry = dy + ((m.y * vh - srcY) / srcH) * dh;
+    let rw2 = ((m.w * vw) / srcW) * dw;
+    let rh2 = ((m.h * vh) / srcH) * dh;
+    // clamp to the video rect
+    const x2 = Math.min(rx + rw2, dx + dw), y2 = Math.min(ry + rh2, dy + dh);
+    rx = Math.max(rx, dx); ry = Math.max(ry, dy);
+    rw2 = x2 - rx; rh2 = y2 - ry;
+    if (rw2 < 3 || rh2 < 3) continue;
+    const pxSize = Math.max(6, rw2 / 14);
+    const ow = Math.max(1, Math.round(rw2 / pxSize)), oh = Math.max(1, Math.round(rh2 / pxSize));
+    maskTmp.width = ow; maskTmp.height = oh;
+    maskTmp.getContext("2d").drawImage(ctx.canvas, rx, ry, rw2, rh2, 0, 0, ow, oh);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(maskTmp, 0, 0, ow, oh, rx, ry, rw2, rh2);
+    ctx.restore();
+    if (ctx === pctx) {
+      maskHits.push({ seg: m, rx, ry, rw: rw2, rh: rh2 });
+      if (state.selMask === m) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(162,155,254,0.95)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]);
+        ctx.strokeRect(rx, ry, rw2, rh2);
+        ctx.restore();
+      }
+    }
+  }
+
+  // webcam bubble
+  bubbleRect = null;
+  if (state.hasCam && state.camOn && camVid.videoWidth) {
+    const size = (state.camSize / 100) * Math.min(W, H);
+    const m = Math.min(W, H) * 0.035;
+    let bx, by;
+    if (state.camX !== null) {
+      bx = clamp(state.camX * W - size / 2, 0, W - size);
+      by = clamp(state.camY * H - size / 2, 0, H - size);
+    } else {
+      bx = state.camPos.includes("r") ? W - m - size : m;
+      by = state.camPos.includes("b") ? H - m - size : m;
+    }
+    if (ctx === pctx) bubbleRect = { bx, by, size, W, H };
+
+    const bubblePath = () => {
+      if (state.camShape === "circle") {
+        ctx.beginPath();
+        ctx.arc(bx + size / 2, by + size / 2, size / 2, 0, Math.PI * 2);
+      } else {
+        roundRectPath(ctx, bx, by, size, size, size * 0.18);
+      }
+    };
+
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = size * 0.18;
+    ctx.shadowOffsetY = size * 0.05;
+    bubblePath();
+    ctx.fillStyle = "#000";
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    bubblePath();
+    ctx.clip();
+    if (state.camMirror) {
+      ctx.translate(2 * bx + size, 0);
+      ctx.scale(-1, 1);
+    }
+    const cw = camVid.videoWidth, ch = camVid.videoHeight;
+    const cs = Math.max(size / cw, size / ch);
+    ctx.drawImage(camVid, bx + (size - cw * cs) / 2, by + (size - ch * cs) / 2, cw * cs, ch * cs);
+    ctx.restore();
+  }
+
+  // full-screen camera moments (smooth crossfade + slight zoom-settle)
+  if (state.hasCam && camVid.videoWidth && state.camSegs.length) {
+    let wc = 0;
+    for (const s of state.camSegs) wc = Math.max(wc, segWeight(s, t, 0.45));
+    if (wc > 0) {
+      ctx.save();
+      ctx.globalAlpha = wc;
+      if (state.camMirror) {
+        ctx.translate(W, 0);
+        ctx.scale(-1, 1);
+      }
+      const cw = camVid.videoWidth, ch = camVid.videoHeight;
+      const cs = Math.max(W / cw, H / ch) * (1.06 - 0.06 * wc);
+      ctx.drawImage(camVid, (W - cw * cs) / 2, (H - ch * cs) / 2, cw * cs, ch * cs);
+      ctx.restore();
+    }
+  }
+
+  // slides / annotations / images / b-roll
+  drawOverlays(ctx, W, H, t);
+
+  // cut indicator (preview only — cuts are skipped during playback & export)
+  if (ctx === pctx) {
+    const cut = state.cutSegs.find(c => t >= c.start && t < c.end);
+    if (cut && !state.playing) {
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.font = `600 ${Math.round(H * 0.045)}px -apple-system, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText("✂ This section is cut — it will be skipped in the export", W / 2, H / 2);
+    }
+  }
+}
+
+/* ================= Playback ================= */
+function renderLoop() {
+  if (!$("editor").classList.contains("active")) return;
+  if (!state.exporting) {
+    updateBroll(screenVid.currentTime);
+    syncCam();
+    drawFrame(pctx, preview.width, preview.height);
+    updateTransportUI();
+    if (state.playing) {
+      const cut = state.cutSegs.find(c => screenVid.currentTime >= c.start && screenVid.currentTime < c.end - 0.05);
+      if (cut) seekTo(Math.min(cut.end, state.trimEnd));
+    }
+    if (state.playing && screenVid.currentTime >= state.trimEnd - 0.02) {
+      pause();
+      seekTo(state.trimStart);
+    }
+  }
+  requestAnimationFrame(renderLoop);
+}
+
+function play() {
+  if (screenVid.currentTime < state.trimStart || screenVid.currentTime >= state.trimEnd - 0.05) {
+    seekTo(state.trimStart);
+  }
+  screenVid.play();
+  if (state.camBlob) camVid.play();
+  state.playing = true;
+  $("btnPlay").textContent = "❚❚";
+}
+function pause() {
+  screenVid.pause();
+  if (state.camBlob) camVid.pause();
+  state.playing = false;
+  $("btnPlay").textContent = "▶";
+}
+function seekTo(t) {
+  t = clamp(t, 0, state.duration);
+  screenVid.currentTime = t;
+  if (state.camBlob) camVid.currentTime = Math.min(t, camVid.duration || t);
+}
+
+// Keep the camera clip locked to the screen clip — recovers from stalls,
+// failed play() calls, and drift instead of freezing.
+function syncCam() {
+  if (!state.camBlob || !camVid.duration || !isFinite(camVid.duration)) return;
+  const target = Math.min(screenVid.currentTime, Math.max(0, camVid.duration - 0.05));
+  if (Math.abs(camVid.currentTime - target) > 0.3) camVid.currentTime = target;
+  if ((state.playing || state.exporting) && camVid.paused && target < camVid.duration - 0.1) {
+    camVid.play().catch(() => {});
+  }
+  if (!state.playing && !state.exporting && !camVid.paused) camVid.pause();
+}
+$("btnPlay").addEventListener("click", () => state.playing ? pause() : play());
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && $("editor").classList.contains("active") && e.target.tagName !== "INPUT" && e.target.tagName !== "SELECT" && e.target.tagName !== "TEXTAREA") {
+    e.preventDefault();
+    state.playing ? pause() : play();
+  }
+});
+
+function fmtTime(t) {
+  t = Math.max(0, t);
+  return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+}
+
+/* ================= Timeline / trim / zoom blocks ================= */
+const timelineWrap = document.querySelector(".tl-track");
+function updateTransportUI() {
+  const d = state.duration || 1;
+  const w = timelineWrap.getBoundingClientRect().width;
+  $("tlPlayhead").style.left = `${(screenVid.currentTime / d) * 100}%`;
+  $("tlDimL").style.width = `${(state.trimStart / d) * 100}%`;
+  $("tlDimR").style.left = `${(state.trimEnd / d) * 100}%`;
+  $("trimL").style.left = `${(state.trimStart / d) * w - 7}px`;
+  $("trimR").style.left = `${(state.trimEnd / d) * w - 7}px`;
+  $("timecode").textContent = `${fmtTime(screenVid.currentTime)} / ${fmtTime(state.trimEnd - state.trimStart)}`;
+}
+
+const LANE_TITLES = {
+  "zoom-block": "Zoom — drag to move · drag edges to stretch/shorten · double-click to remove",
+  "cam-block": "Full-screen camera — drag to move · drag edges to resize · double-click to remove",
+  "cut-block": "Cut (skipped on export) — drag to move · drag edges to resize · double-click to remove",
+  "ov-slide": "Text slide — click to edit text · drag to move · edges resize · double-click removes",
+  "ov-note": "Annotation — click to edit text · drag to move · edges resize · double-click removes",
+  "ov-image": "Image overlay — drag to move · edges resize · double-click removes",
+  "ov-broll": "Video clip overlay — drag to move · edges resize · double-click removes",
+  "mask-block": "Mask — click to select · drag to move · edges resize · double-click removes",
+};
+
+async function handleBlockClick(seg) {
+  if (state.zoomSegs.includes(seg)) {
+    state.selZoom = seg;
+    $("ctlZoomLevel").value = Math.round(seg.z * 100);
+    renderZoomBlocks();
+    return;
+  }
+  if (seg.type === "slide" || seg.type === "note") {
+    const nt = await askText(seg.type === "slide" ? "Edit slide text" : "Edit annotation text", seg.text);
+    if (nt !== null && nt.trim()) seg.text = nt.trim();
+  } else if (seg.w !== undefined && seg.h !== undefined && state.maskSegs.includes(seg)) {
+    state.selMask = seg;
+    $("ctlMaskW").value = Math.round(seg.w * 100);
+    $("ctlMaskH").value = Math.round(seg.h * 100);
+  }
+}
+
+function renderZoomBlocks() {
+  document.querySelectorAll(".lane-block").forEach(b => b.remove());
+  renderLane(state.zoomSegs, "zoom-block");
+  renderLane(state.camSegs, "cam-block");
+  renderLane(state.overlaySegs, (seg) => "ov-" + seg.type);
+  renderLane(state.maskSegs, "mask-block");
+  renderLane(state.cutSegs, "cut-block");
+}
+
+function renderLane(arr, clsOrFn) {
+  const d = state.duration || 1;
+  const EDGE = 9; // px hit zone for resize handles
+  arr.forEach((seg) => {
+    const cls = typeof clsOrFn === "function" ? clsOrFn(seg) : clsOrFn;
+    const el = document.createElement("div");
+    el.className = "lane-block " + cls;
+    if (seg === state.selZoom || seg === state.selMask) el.classList.add("sel");
+    el.title = LANE_TITLES[cls] || "";
+    el.style.left = `${(seg.start / d) * 100}%`;
+    el.style.width = `${((seg.end - seg.start) / d) * 100}%`;
+
+    el.addEventListener("pointermove", (ev) => {
+      const w = el.getBoundingClientRect().width;
+      const ox = ev.clientX - el.getBoundingClientRect().left;
+      el.style.cursor = (ox < EDGE || ox > w - EDGE) ? "ew-resize" : "grab";
+    });
+
+    // click = edit/select, double-click = remove (handled manually so the
+    // prompt() from a single click can't swallow the second click)
+    const clickOrRemove = () => {
+      const now = Date.now();
+      if (el._lastUp && now - el._lastUp < 350) {
+        clearTimeout(el._editTimer);
+        const idx = arr.indexOf(seg);
+        if (idx >= 0) arr.splice(idx, 1);
+        if (state.selMask === seg) state.selMask = null;
+        if (state.selZoom === seg) state.selZoom = null;
+        renderZoomBlocks();
+      } else {
+        el._lastUp = now;
+        el._editTimer = setTimeout(() => handleBlockClick(seg), 360);
+      }
+    };
+
+    el.addEventListener("pointerdown", (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      const tlRect = $("timeline").getBoundingClientRect();
+      const blockRect = el.getBoundingClientRect();
+      const ox = ev.clientX - blockRect.left;
+      const zone = ox < EDGE ? "l" : (ox > blockRect.width - EDGE ? "r" : "m");
+      const startS = seg.start, endS = seg.end, startX = ev.clientX;
+      const perPx = d / tlRect.width;
+      let moved = false;
+
+      const move = (mv) => {
+        const ds = (mv.clientX - startX) * perPx;
+        if (Math.abs(mv.clientX - startX) > 2) moved = true;
+        if (zone === "l") {
+          seg.start = clamp(Math.min(startS + ds, seg.end - 0.3), 0, d);
+        } else if (zone === "r") {
+          seg.end = clamp(Math.max(endS + ds, seg.start + 0.3), 0, d);
+        } else {
+          const len = endS - startS;
+          const ns = clamp(startS + ds, 0, d - len);
+          seg.start = ns;
+          seg.end = ns + len;
+        }
+        el.style.left = `${(seg.start / d) * 100}%`;
+        el.style.width = `${((seg.end - seg.start) / d) * 100}%`;
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        if (moved) {
+          arr.sort((a, b) => a.start - b.start);
+          renderZoomBlocks(); // re-render only after a real drag
+        } else {
+          clickOrRemove();
+        }
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+
+    $("timeline").appendChild(el);
+  });
+}
+
+$("timeline").addEventListener("pointerdown", (e) => {
+  if (state.selZoom || state.selMask) {
+    state.selZoom = null;
+    state.selMask = null;
+    renderZoomBlocks();
+  }
+  const rect = $("timeline").getBoundingClientRect();
+  const seek = (ev) => {
+    const frac = clamp((ev.clientX - rect.left) / rect.width, 0, 1);
+    seekTo(frac * state.duration);
+  };
+  seek(e);
+  const move = (ev) => seek(ev);
+  const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+
+function bindTrim(handleId, key) {
+  $(handleId).addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    const rect = $("timeline").getBoundingClientRect();
+    const move = (ev) => {
+      const frac = clamp((ev.clientX - rect.left) / rect.width, 0, 1);
+      let t = frac * state.duration;
+      if (key === "trimStart") t = Math.min(t, state.trimEnd - 0.2);
+      else t = Math.max(t, state.trimStart + 0.2);
+      state[key] = t;
+      seekTo(t);
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+bindTrim("trimL", "trimStart");
+bindTrim("trimR", "trimEnd");
+
+/* ---- Drag masks & annotations on the preview (capture phase runs first) ---- */
+preview.addEventListener("pointerdown", (e) => {
+  const r = preview.getBoundingClientRect();
+  const toC = (ev) => ({
+    x: (ev.clientX - r.left) * (preview.width / r.width),
+    y: (ev.clientY - r.top) * (preview.height / r.height),
+  });
+  const p = toC(e);
+  const hit = (arr) => arr.find(h => p.x >= h.rx && p.x <= h.rx + h.rw && p.y >= h.ry && p.y <= h.ry + h.rh);
+
+  const mh = hit(maskHits);
+  if (mh && lastLayout) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    state.selMask = mh.seg;
+    $("ctlMaskW").value = Math.round(mh.seg.w * 100);
+    $("ctlMaskH").value = Math.round(mh.seg.h * 100);
+    const L = lastLayout, seg = mh.seg, ox = seg.x, oy = seg.y;
+    const move = (mv) => {
+      const q = toC(mv);
+      seg.x = clamp(ox + ((q.x - p.x) / L.dw) * (L.srcW / L.vw), 0, 1 - seg.w);
+      seg.y = clamp(oy + ((q.y - p.y) / L.dh) * (L.srcH / L.vh), 0, 1 - seg.h);
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return;
+  }
+
+  const nh = hit(noteHits);
+  if (nh) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    const seg = nh.seg, ox = seg.x, oy = seg.y;
+    const move = (mv) => {
+      const q = toC(mv);
+      seg.x = clamp(ox + (q.x - p.x) / preview.width, 0.02, 0.98);
+      seg.y = clamp(oy + (q.y - p.y) / preview.height, 0.02, 0.98);
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+}, { capture: true });
+
+/* ---- Double-click the preview to aim a zoom at that spot ---- */
+let lastLayout = null;
+preview.addEventListener("dblclick", (e) => {
+  if (!lastLayout || !state.zoomSegs.length) return;
+  const r = preview.getBoundingClientRect();
+  const cx = (e.clientX - r.left) * (preview.width / r.width);
+  const cy = (e.clientY - r.top) * (preview.height / r.height);
+  const L = lastLayout;
+  if (cx < L.dx || cx > L.dx + L.dw || cy < L.dy || cy > L.dy + L.dh) return;
+  // canvas point -> normalized video coords (accounting for current zoom)
+  const u = (L.srcX + ((cx - L.dx) / L.dw) * L.srcW) / L.vw;
+  const v = (L.srcY + ((cy - L.dy) / L.dh) * L.srcH) / L.vh;
+
+  const t = screenVid.currentTime;
+  let seg = state.zoomSegs.find(s => t >= s.start && t <= s.end);
+  if (!seg) {
+    // no segment under the playhead — aim the nearest one
+    let best = null;
+    for (const s of state.zoomSegs) {
+      const dist = Math.min(Math.abs(s.start - t), Math.abs(s.end - t));
+      if (!best || dist < best.dist) best = { s, dist };
+    }
+    seg = best.s;
+  }
+  seg.x = clamp(u, 0, 1);
+  seg.y = clamp(v, 0, 1);
+});
+
+/* ---- Draggable webcam bubble on the preview canvas ---- */
+let bubbleRect = null;
+preview.addEventListener("pointerdown", (e) => {
+  if (!bubbleRect || !state.hasCam || !state.camOn) return;
+  const r = preview.getBoundingClientRect();
+  const toCanvas = (ev) => ({
+    x: (ev.clientX - r.left) * (preview.width / r.width),
+    y: (ev.clientY - r.top) * (preview.height / r.height),
+  });
+  const p = toCanvas(e);
+  const { bx, by, size } = bubbleRect;
+  if (p.x < bx || p.x > bx + size || p.y < by || p.y > by + size) return;
+
+  e.preventDefault();
+  const grabDX = p.x - (bx + size / 2), grabDY = p.y - (by + size / 2);
+  preview.style.cursor = "grabbing";
+  const move = (ev) => {
+    const q = toCanvas(ev);
+    state.camX = clamp((q.x - grabDX) / preview.width, 0, 1);
+    state.camY = clamp((q.y - grabDY) / preview.height, 0, 1);
+  };
+  const up = () => {
+    preview.style.cursor = "";
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+});
+
+/* ================= Controls ================= */
+document.querySelectorAll("#aspectSeg button").forEach(b =>
+  b.addEventListener("click", () => setAspect(b.dataset.a)));
+
+const bgGrid = $("bgGrid");
+BG_PRESETS.forEach((p, i) => {
+  const el = document.createElement("div");
+  el.className = "bg-swatch" + (i === 0 ? " on" : "");
+  el.style.background = p.type === "solid" ? p.color : `linear-gradient(${p.angle}deg, ${p.stops.join(",")})`;
+  el.addEventListener("click", () => {
+    state.bg = p;
+    document.querySelectorAll(".bg-swatch").forEach(s => s.classList.remove("on"));
+    el.classList.add("on");
+  });
+  bgGrid.appendChild(el);
+});
+$("bgColor").addEventListener("input", (e) => {
+  state.bg = { type: "solid", color: e.target.value };
+  document.querySelectorAll(".bg-swatch").forEach(s => s.classList.remove("on"));
+});
+$("bgImage").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => {
+    state.bgImageEl = img;
+    state.bg = { type: "image" };
+    document.querySelectorAll(".bg-swatch").forEach(s => s.classList.remove("on"));
+  };
+  img.src = URL.createObjectURL(f);
+});
+
+const bindRange = (id, key, scale = 1) =>
+  $(id).addEventListener("input", e => state[key] = +e.target.value * scale);
+bindRange("ctlPad", "pad");
+bindRange("ctlRadius", "radius");
+bindRange("ctlShadow", "shadow");
+bindRange("ctlInset", "inset");
+bindRange("ctlCamSize", "camSize");
+bindRange("ctlCursorSize", "cursorSize");
+$("ctlZoomLevel").addEventListener("input", (e) => {
+  const v = +e.target.value / 100;
+  if (state.selZoom) state.selZoom.z = v; // edit just the selected block
+  else state.zoomLevel = v;               // default for new/regenerated zooms
+});
+$("ctlZoomFollow").addEventListener("change", e => state.zoomFollow = e.target.checked);
+$("ctlGlide").addEventListener("input", e => state.glide = +e.target.value / 100);
+$("ctlCursorSmooth").addEventListener("input", e => {
+  state.cursorSmooth = +e.target.value;
+  buildCursorTrack();
+});
+$("ctlZoomOn").addEventListener("change", e => state.zoomOn = e.target.checked);
+$("ctlCursorOn").addEventListener("change", e => state.cursorOn = e.target.checked);
+$("ctlClickFx").addEventListener("change", e => state.clickFx = e.target.checked);
+$("ctlCursorHide").addEventListener("change", e => state.cursorAutoHide = e.target.checked);
+$("ctlConceal").addEventListener("change", e => state.concealCursor = e.target.checked);
+$("ctlCursorLoop").addEventListener("change", e => state.cursorLoop = e.target.checked);
+
+/* ---- Text input dialog (replaces window.prompt, unsupported in Electron) ---- */
+function askText(title, value = "") {
+  return new Promise((resolve) => {
+    const m = $("modal"), inp = $("modalInput");
+    $("modalTitle").textContent = title;
+    inp.value = value;
+    m.style.display = "flex";
+    setTimeout(() => { inp.focus(); inp.select(); }, 0);
+    const cleanup = (val) => {
+      m.style.display = "none";
+      $("modalOk").onclick = $("modalCancel").onclick = inp.onkeydown = null;
+      resolve(val);
+    };
+    $("modalOk").onclick = () => cleanup(inp.value);
+    $("modalCancel").onclick = () => cleanup(null);
+    inp.onkeydown = (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); cleanup(inp.value); }
+      if (e.key === "Escape") cleanup(null);
+    };
+  });
+}
+$("ctlCamOn").addEventListener("change", e => state.camOn = e.target.checked);
+$("ctlCamMirror").addEventListener("change", e => state.camMirror = e.target.checked);
+$("ctlCamPos").addEventListener("change", e => {
+  state.camPos = e.target.value;
+  state.camX = state.camY = null; // corner preset overrides dragged position
+});
+$("ctlCamShape").addEventListener("change", e => state.camShape = e.target.value);
+
+$("btnZoomRegen").addEventListener("click", () => {
+  state.selZoom = null;
+  state.zoomSegs = generateAutoZooms();
+  renderZoomBlocks();
+});
+$("btnZoomAdd").addEventListener("click", () => {
+  const t = screenVid.currentTime;
+  const cp = cursorAt(t) || { x: 0.5, y: 0.5 };
+  state.zoomSegs.push({
+    start: clamp(t - 0.2, 0, state.duration),
+    end: clamp(t + 2.2, 0, state.duration),
+    x: cp.x, y: cp.y, z: state.zoomLevel,
+  });
+  state.zoomSegs = mergeSegs(state.zoomSegs);
+  renderZoomBlocks();
+});
+
+$("btnCut").addEventListener("click", () => {
+  const t = screenVid.currentTime;
+  state.cutSegs.push({ start: clamp(t, 0, state.duration), end: clamp(t + 2, 0, state.duration), x: .5, y: .5, z: 1 });
+  state.cutSegs = mergeSegs(state.cutSegs);
+  renderZoomBlocks();
+});
+$("btnCamFull").addEventListener("click", () => {
+  const t = screenVid.currentTime;
+  state.camSegs.push({ start: clamp(t, 0, state.duration), end: clamp(t + 2.5, 0, state.duration), x: .5, y: .5, z: 1 });
+  state.camSegs = mergeSegs(state.camSegs);
+  renderZoomBlocks();
+});
+$("ctlEnhance").addEventListener("change", e => state.enhanceVoice = e.target.checked);
+$("ctlSaveCam").addEventListener("change", e => state.saveCamClip = e.target.checked);
+$("ctlAnim").addEventListener("change", e => state.animStyle = e.target.value);
+
+/* ---- Overlay buttons ---- */
+function addOverlay(seg) {
+  state.overlaySegs.push(seg);
+  state.overlaySegs.sort((a, b) => a.start - b.start);
+  renderZoomBlocks();
+}
+$("btnSlide").addEventListener("click", async () => {
+  const text = await askText("Slide text", "Section title");
+  if (!text || !text.trim()) return;
+  const t = screenVid.currentTime;
+  addOverlay({ type: "slide", text: text.trim(), start: clamp(t, 0, state.duration), end: clamp(t + 3, 0, state.duration) });
+});
+$("btnNote").addEventListener("click", async () => {
+  const text = await askText("Annotation text", "Click here");
+  if (!text || !text.trim()) return;
+  const t = screenVid.currentTime;
+  addOverlay({ type: "note", text: text.trim(), x: 0.5, y: 0.78, start: clamp(t, 0, state.duration), end: clamp(t + 2.5, 0, state.duration) });
+});
+$("btnImg").addEventListener("click", () => $("imgFile").click());
+$("imgFile").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => {
+    const t = screenVid.currentTime;
+    addOverlay({ type: "image", img, start: clamp(t, 0, state.duration), end: clamp(t + 4, 0, state.duration) });
+  };
+  img.src = URL.createObjectURL(f);
+  e.target.value = "";
+});
+$("btnBroll").addEventListener("click", () => $("brollFile").click());
+$("brollFile").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const el = document.createElement("video");
+  el.muted = true;
+  el.playsInline = true;
+  el.onloadedmetadata = () => {
+    const t = screenVid.currentTime;
+    const len = Math.min(el.duration || 5, 8);
+    addOverlay({ type: "broll", el, start: clamp(t, 0, state.duration), end: clamp(t + len, 0, state.duration) });
+  };
+  el.src = URL.createObjectURL(f);
+  e.target.value = "";
+});
+
+/* ---- Masking ---- */
+$("btnMask").addEventListener("click", () => {
+  const t = screenVid.currentTime;
+  const seg = { start: clamp(t, 0, state.duration), end: clamp(t + 3, 0, state.duration), x: 0.38, y: 0.44, w: 0.25, h: 0.12 };
+  state.maskSegs.push(seg);
+  state.maskSegs.sort((a, b) => a.start - b.start);
+  state.selMask = seg;
+  renderZoomBlocks();
+});
+$("ctlMaskW").addEventListener("input", (e) => {
+  if (state.selMask) state.selMask.w = clamp(+e.target.value / 100, 0.02, 1 - state.selMask.x);
+});
+$("ctlMaskH").addEventListener("input", (e) => {
+  if (state.selMask) state.selMask.h = clamp(+e.target.value / 100, 0.02, 1 - state.selMask.y);
+});
+
+/* ---- Audio waveform lane ---- */
+async function buildWaveform() {
+  const cv = $("tlWave"), tl = $("timeline");
+  cv.width = Math.max(600, tl.clientWidth * 2);
+  cv.height = 52; // audio row rendered at 2x
+  const g = cv.getContext("2d");
+  g.clearRect(0, 0, cv.width, cv.height);
+  $("vidClipLabel").textContent =
+    `${state.source && state.source.kind === "import" ? "Imported video" : "Screen recording"} · ${fmtTime(state.duration)}`;
+  if (!state.hasAudio) {
+    g.fillStyle = "rgba(255,255,255,0.22)";
+    g.font = "20px -apple-system, sans-serif";
+    g.fillText("no audio", 14, 34);
+    return;
+  }
+  try {
+    const ac = new AudioContext();
+    const buf = await ac.decodeAudioData(await state.screenBlob.arrayBuffer());
+    ac.close();
+    const data = buf.getChannelData(0);
+    const N = 400, step = Math.floor(data.length / N);
+    const mid = cv.height / 2;
+    g.fillStyle = "rgba(162,155,254,0.6)";
+    for (let i = 0; i < N; i++) {
+      let peak = 0;
+      for (let j = i * step; j < (i + 1) * step; j += 64) peak = Math.max(peak, Math.abs(data[j] || 0));
+      const h = Math.max(2, peak * cv.height * 0.92);
+      g.fillRect((i / N) * cv.width, mid - h / 2, (cv.width / N) * 0.65, h);
+    }
+  } catch (e) { /* audio not decodable — skip waveform */ }
+}
+
+$("btnNew").addEventListener("click", () => location.reload());
+
+/* ================= Export ================= */
+const FORMATS = [];
+(function detectFormats() {
+  const tryF = (mime, label, ext) => {
+    if (MediaRecorder.isTypeSupported(mime)) FORMATS.push({ mime, label, ext });
+  };
+  tryF("video/mp4;codecs=avc1.640028,mp4a.40.2", "MP4 (H.264)", "mp4");
+  tryF("video/mp4", "MP4", "mp4");
+  tryF("video/webm;codecs=vp9,opus", "WebM (VP9)", "webm");
+  tryF("video/webm", "WebM", "webm");
+  const seen = new Set();
+  const uniq = FORMATS.filter(f => !seen.has(f.ext) && seen.add(f.ext));
+  FORMATS.length = 0; FORMATS.push(...uniq);
+  FORMATS.push({ mime: "gif", label: "GIF (no audio)", ext: "gif" });
+  FORMATS.forEach((f, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = f.label;
+    $("expFormat").appendChild(o);
+  });
+})();
+
+function setProgress(frac, label) {
+  $("exportProgress").style.display = "block";
+  $("progFill").style.width = `${Math.round(frac * 100)}%`;
+  $("progLabel").textContent = label;
+}
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
+function makeExportCanvas() {
+  const targetH = +$("expRes").value;
+  const c = document.createElement("canvas");
+  if (state.aspect >= 1) { c.height = targetH; c.width = Math.round(targetH * state.aspect); }
+  else { c.width = targetH; c.height = Math.round(targetH / state.aspect); }
+  c.width += c.width % 2; c.height += c.height % 2;
+  return c;
+}
+function seekAndWait(el, t) {
+  return new Promise((resolve) => {
+    if (Math.abs(el.currentTime - t) < 0.01) { resolve(); return; }
+    const timeout = setTimeout(() => { el.onseeked = null; resolve(); }, 800);
+    el.onseeked = () => { el.onseeked = null; clearTimeout(timeout); resolve(); };
+    el.currentTime = t;
+  });
+}
+
+$("btnExport").addEventListener("click", async () => {
+  if (state.exporting) return;
+  const fmt = FORMATS[+$("expFormat").value];
+  pause();
+  state.exporting = true;
+  $("btnExport").disabled = true;
+  try {
+    if (fmt.ext === "gif") await exportGif();
+    else await exportVideo(fmt);
+    setProgress(1, "Done! Check your downloads.");
+  } catch (err) {
+    setProgress(0, "Export failed: " + err.message);
+    console.error(err);
+  } finally {
+    state.exporting = false;
+    $("btnExport").disabled = false;
+    setTimeout(() => { $("exportProgress").style.display = "none"; }, 4000);
+  }
+});
+
+function wireExportAudio() {
+  if (!state.hasAudio) return [];
+  if (!state.audioWired) {
+    state.audioCtx = new AudioContext();
+    state.audioSrc = state.audioCtx.createMediaElementSource(screenVid);
+    state.audioDest = state.audioCtx.createMediaStreamDestination();
+    // voice enhancement chain: rumble filter -> presence boost -> compressor
+    state.fxHp = state.audioCtx.createBiquadFilter();
+    state.fxHp.type = "highpass"; state.fxHp.frequency.value = 90;
+    state.fxPresence = state.audioCtx.createBiquadFilter();
+    state.fxPresence.type = "peaking"; state.fxPresence.frequency.value = 3200;
+    state.fxPresence.gain.value = 2.5; state.fxPresence.Q.value = 0.9;
+    state.fxComp = state.audioCtx.createDynamicsCompressor();
+    state.fxComp.threshold.value = -24; state.fxComp.knee.value = 25;
+    state.fxComp.ratio.value = 4; state.fxComp.attack.value = 0.005; state.fxComp.release.value = 0.2;
+    state.audioWired = true;
+  }
+  // (re)wire according to the current Enhance voice toggle
+  try {
+    state.audioSrc.disconnect(); state.fxHp.disconnect();
+    state.fxPresence.disconnect(); state.fxComp.disconnect();
+  } catch (e) {}
+  if (state.enhanceVoice) {
+    state.audioSrc.connect(state.fxHp);
+    state.fxHp.connect(state.fxPresence);
+    state.fxPresence.connect(state.fxComp);
+    state.fxComp.connect(state.audioDest);
+    state.fxComp.connect(state.audioCtx.destination);
+  } else {
+    state.audioSrc.connect(state.audioDest);
+    state.audioSrc.connect(state.audioCtx.destination);
+  }
+  state.audioCtx.resume();
+  return state.audioDest.stream.getAudioTracks();
+}
+
+async function exportVideo(fmt) {
+  const canvas = makeExportCanvas();
+  const ctx = canvas.getContext("2d");
+  const stream = canvas.captureStream(60);
+  wireExportAudio().forEach(t => stream.addTrack(t));
+
+  const rec = new MediaRecorder(stream, { mimeType: fmt.mime, videoBitsPerSecond: 10_000_000 });
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  const done = new Promise(r => rec.onstop = r);
+
+  await seekAndWait(screenVid, state.trimStart);
+  if (state.camBlob) await seekAndWait(camVid, Math.min(state.trimStart, camVid.duration || state.trimStart));
+
+  rec.start(500);
+  screenVid.play();
+  if (state.camBlob) camVid.play();
+
+  const total = state.trimEnd - state.trimStart;
+  await new Promise((resolve) => {
+    const tick = () => {
+      if (screenVid.currentTime >= state.trimEnd || screenVid.ended) { resolve(); return; }
+      // skip cut sections
+      const cut = state.cutSegs.find(c => screenVid.currentTime >= c.start && screenVid.currentTime < c.end - 0.05);
+      if (cut) {
+        const target = Math.min(cut.end, state.trimEnd);
+        screenVid.currentTime = target;
+        if (state.camBlob) camVid.currentTime = Math.min(target, camVid.duration || target);
+      } else {
+        updateBroll(screenVid.currentTime);
+        syncCam();
+        drawFrame(ctx, canvas.width, canvas.height);
+      }
+      const p = (screenVid.currentTime - state.trimStart) / total;
+      setProgress(p, `Rendering ${fmt.label}… ${Math.round(p * 100)}%`);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+
+  screenVid.pause();
+  if (state.camBlob) camVid.pause();
+  rec.stop();
+  await done;
+  const outBlob = new Blob(chunks, { type: fmt.mime.split(";")[0] });
+  download(outBlob, `studio-recording.${fmt.ext}`);
+  if (state.saveCamClip && state.camBlob) download(state.camBlob, "studio-webcam-clip.webm");
+  lastExport = { blob: outBlob, name: `studio-recording.${fmt.ext}` };
+  $("btnShare").style.display = "block";
+}
+
+/* ================= GIF export ================= */
+let gifLibPromise = null;
+function loadGifLib() {
+  if (gifLibPromise) return gifLibPromise;
+  gifLibPromise = (async () => {
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js";
+      s.onload = res; s.onerror = () => rej(new Error("Could not load GIF encoder (needs internet)"));
+      document.head.appendChild(s);
+    });
+    const workerText = await (await fetch("https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js")).text();
+    return URL.createObjectURL(new Blob([workerText], { type: "application/javascript" }));
+  })();
+  return gifLibPromise;
+}
+
+async function exportGif() {
+  const workerUrl = await loadGifLib();
+  const canvas = makeExportCanvas();
+  const maxW = 720;
+  if (canvas.width > maxW) {
+    const s = maxW / canvas.width;
+    canvas.width = Math.round(canvas.width * s);
+    canvas.height = Math.round(canvas.height * s);
+  }
+  const ctx = canvas.getContext("2d");
+
+  const fps = 12;
+  const cutTotal = state.cutSegs.reduce((a, c) =>
+    a + Math.max(0, Math.min(c.end, state.trimEnd) - Math.max(c.start, state.trimStart)), 0);
+  const total = Math.max(0.1, state.trimEnd - state.trimStart - cutTotal);
+  const frames = Math.min(Math.floor(total * fps), 12 * 60);
+  const gif = new GIF({ workers: 3, quality: 12, workerScript: workerUrl, width: canvas.width, height: canvas.height });
+
+  let t = state.trimStart, i = 0;
+  while (t < state.trimEnd && i < frames) {
+    const cut = state.cutSegs.find(c => t >= c.start && t < c.end);
+    if (cut) { t = cut.end; continue; }
+    await seekAndWait(screenVid, t);
+    if (state.camBlob) await seekAndWait(camVid, Math.min(t, camVid.duration || t));
+    drawFrame(ctx, canvas.width, canvas.height);
+    gif.addFrame(ctx, { copy: true, delay: 1000 / fps });
+    setProgress((i / frames) * 0.6, `Capturing frames… ${Math.round((i / frames) * 100)}%`);
+    t += 1 / fps;
+    i++;
+  }
+
+  const blob = await new Promise((resolve) => {
+    gif.on("progress", p => setProgress(0.6 + p * 0.4, `Encoding GIF… ${Math.round(p * 100)}%`));
+    gif.on("finished", resolve);
+    gif.render();
+  });
+  download(blob, "studio-recording.gif");
+  lastExport = { blob, name: "studio-recording.gif" };
+  $("btnShare").style.display = "block";
+}
+
+/* ================= Shareable link ================= */
+let sharing = false;
+$("btnShare").addEventListener("click", async () => {
+  if (!lastExport || sharing) return;
+  sharing = true;
+  try {
+    setProgress(0.5, "Uploading for share link…");
+    const url = await window.studio.shareUpload(await lastExport.blob.arrayBuffer(), lastExport.name);
+    await navigator.clipboard.writeText(url);
+    setProgress(1, `Link copied to clipboard: ${url}`);
+  } catch (e) {
+    setProgress(0, "Share failed: " + e.message);
+  } finally {
+    sharing = false;
+  }
+});
+</script>
+</body>
+</html>

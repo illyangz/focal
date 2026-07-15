@@ -1,0 +1,49 @@
+{
+  "name": "focal",
+  "version": "1.0.0",
+  "description": "Beautiful screen recordings with automatic zoom",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.focal.app",
+    "productName": "Focal",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.html",
+      "overlay.html",
+      "overlay-preload.js",
+      "package.json",
+      "build/icon.png",
+      "build/Video Icons.png"
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null,
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "build/icon.png"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "optionalDependencies": {
+    "uiohook-napi": "^1.5.4"
+  }
+}
