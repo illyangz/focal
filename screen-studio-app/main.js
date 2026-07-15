@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer, screen, globalShortcut, systemPreferences, shell, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 
 // Sets the name shown in the Dock, Cmd+Tab switcher, and menu bar — must be
 // called before the app is ready. electron-builder uses `productName` for the
@@ -286,6 +286,118 @@ ipcMain.handle("track-stop", () => {
   return { events, winSamples };
 });
 
+/* ---------- Native capture (ScreenCaptureKit helper) ----------
+ * Records screen/window/custom-area video via a small Swift helper instead of
+ * Electron's desktopCapturer/getDisplayMedia — the helper sets showsCursor
+ * to false on the actual capture stream, which genuinely excludes the cursor
+ * from the recorded pixels (desktopCapturer doesn't reliably honor this,
+ * especially for window sources — see renderer.html's old blur-erase
+ * workaround). It also crops natively, so custom-area recording no longer
+ * depends on a canvas being redrawn every frame while the window is minimized.
+ */
+// child_process.spawn can't exec a binary from inside the virtual asar
+// archive (unlike fs.readFile, Electron doesn't auto-redirect spawn paths) —
+// asarUnpack puts the real file at the mirrored .unpacked path instead.
+const captureHelperPath = path.join(__dirname, "native", "focal_capture").replace("app.asar", "app.asar.unpacked");
+let captureProc = null;
+let captureOutPath = null;
+
+function captureAvailable() {
+  return process.platform === "darwin" && fs.existsSync(captureHelperPath);
+}
+ipcMain.handle("native-capture-available", () => captureAvailable());
+
+ipcMain.handle("native-capture-start", (e, opts) => {
+  return new Promise((resolve, reject) => {
+    if (captureProc) { reject(new Error("a capture is already running")); return; }
+    if (!captureAvailable()) { reject(new Error("native capture helper unavailable")); return; }
+
+    const outPath = path.join(app.getPath("temp"), `focal-capture-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`);
+    const args = ["record", "--out", outPath, "--fps", String(opts.fps || 60)];
+    if (opts.kind === "window") {
+      args.push("--window-title", opts.windowTitle || "");
+      if (opts.windowOwner) args.push("--window-owner", opts.windowOwner);
+    } else {
+      const b = opts.displayBounds;
+      args.push("--display-bounds", `${b.x},${b.y},${b.width},${b.height}`);
+    }
+    if (opts.crop) {
+      const c = opts.crop;
+      args.push("--crop", `${c.x},${c.y},${c.width},${c.height}`);
+    }
+
+    const proc = spawn(captureHelperPath, args, { stdio: ["pipe", "pipe", "pipe"] });
+    let settled = false;
+    let stderrBuf = "";
+    proc.stderr.on("data", (d) => { stderrBuf += d.toString(); });
+    proc.stdout.on("data", (d) => {
+      const lines = d.toString().split("\n");
+      for (const line of lines) {
+        if (line.startsWith("RECORDING") && !settled) {
+          settled = true;
+          captureProc = proc;
+          captureOutPath = outPath;
+          resolve({ ok: true });
+        } else if (line.startsWith("ERROR") && !settled) {
+          settled = true;
+          try { proc.kill("SIGKILL"); } catch {}
+          reject(new Error(line));
+        }
+      }
+    });
+    proc.on("exit", (code) => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`capture helper exited early (code ${code}): ${stderrBuf.slice(0, 400)}`));
+      }
+      if (captureProc === proc) { captureProc = null; }
+    });
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        try { proc.kill("SIGKILL"); } catch {}
+        reject(new Error("capture helper start timed out"));
+      }
+    }, 6000);
+    proc.on("exit", () => clearTimeout(timeout));
+  });
+});
+
+ipcMain.handle("native-capture-stop", () => {
+  return new Promise((resolve) => {
+    if (!captureProc) { resolve(null); return; }
+    const proc = captureProc;
+    const outPath = captureOutPath;
+    let settled = false;
+    proc.stdout.on("data", (d) => {
+      if (d.toString().includes("DONE") && !settled) { /* let 'exit' resolve, just observed */ }
+    });
+    proc.on("exit", () => {
+      if (settled) return;
+      settled = true;
+      captureProc = null;
+      captureOutPath = null;
+      resolve({ path: outPath });
+    });
+    try { proc.kill("SIGINT"); } catch {}
+    setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        try { proc.kill("SIGKILL"); } catch {}
+        captureProc = null;
+        captureOutPath = null;
+        resolve({ path: outPath });
+      }
+    }, 8000);
+  });
+});
+
+ipcMain.handle("native-capture-read", async (e, filePath) => {
+  const buf = fs.readFileSync(filePath);
+  try { fs.unlinkSync(filePath); } catch {}
+  return buf;
+});
+
 /* ---------- Crash/reload recovery: persist the last recording ---------- */
 const recoveryDir = () => path.join(app.getPath("userData"), "recovery");
 
@@ -306,6 +418,7 @@ ipcMain.handle("recovery-load", async () => {
     if (!fs.existsSync(path.join(d, "screen.webm"))) return null;
     const out = { screen: fs.readFileSync(path.join(d, "screen.webm")) };
     if (fs.existsSync(path.join(d, "cam.webm"))) out.cam = fs.readFileSync(path.join(d, "cam.webm"));
+    if (fs.existsSync(path.join(d, "mic.webm"))) out.mic = fs.readFileSync(path.join(d, "mic.webm"));
     if (fs.existsSync(path.join(d, "meta.json"))) out.meta = fs.readFileSync(path.join(d, "meta.json"), "utf8");
     return out;
   } catch { return null; }

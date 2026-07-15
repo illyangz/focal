@@ -20,7 +20,11 @@
       "overlay-preload.js",
       "package.json",
       "build/icon.png",
-      "build/Video Icons.png"
+      "build/Video Icons.png",
+      "native/focal_capture"
+    ],
+    "asarUnpack": [
+      "native/focal_capture"
     ],
     "mac": {
       "category": "public.app-category.video",

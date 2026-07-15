@@ -410,6 +410,7 @@
 
 <video id="screenVid" style="display:none" playsinline></video>
 <video id="camVid" style="display:none" playsinline muted></video>
+<audio id="micAud" style="display:none"></audio>
 
 <script>
 "use strict";
@@ -419,7 +420,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   source: null, useCam: false, useMic: false,
   cropRect: null,        // {x,y,width,height} in global DIP coords — custom capture area, screen sources only
-  screenBlob: null, camBlob: null, hasAudio: false, hasCam: false,
+  screenBlob: null, camBlob: null, micBlob: null, hasAudio: false, hasCam: false,
   duration: 0, trimStart: 0, trimEnd: 0,
   playing: false, exporting: false,
   // cursor/zoom data
@@ -704,11 +705,12 @@ function switchScreen(name) {
 
 /* ================= Recording ================= */
 let screenStream, camStream, micStream;
-let screenRecorder, camRecorder;
-let screenChunks = [], camChunks = [];
+let screenRecorder, camRecorder, micRecorder;
+let screenChunks = [], camChunks = [], micChunks = [];
 let recStartWall = 0, timerInterval = null;
-let cropStopFn = null;      // stops the live-crop draw loop, if a custom area is being recorded
+let cropStopFn = null;      // stops the live-crop draw loop, if a custom area is being recorded (legacy path only)
 let appliedCropRect = null; // the crop rect actually in effect for the current recording (or null)
+let usingNativeCapture = false; // true when recording via the ScreenCaptureKit helper instead of getDisplayMedia
 
 function pickMime(cands) {
   for (const c of cands) if (MediaRecorder.isTypeSupported(c)) return c;
@@ -781,66 +783,16 @@ $("btnStart").addEventListener("click", async () => {
   }
   stopPreviews();
 
-  let isScreen = state.source.kind !== "window";
-  // Hide the system cursor whenever we can re-draw it from data: always for
-  // screens, and for windows too when window-bounds tracking is available.
-  let winTrack = false;
-  try { winTrack = await window.studio.winTracking(); } catch (e) {}
-  const cursorMode = () => (isScreen || winTrack) ? "never" : "always";
-  const wantCursor = cursorMode();
-  try {
-    window.studio.selectSource(state.source.id);
-    screenStream = await navigator.mediaDevices.getDisplayMedia({
-      audio: false,
-      video: { frameRate: { ideal: 60 }, cursor: wantCursor },
-    });
-    try {
-      await screenStream.getVideoTracks()[0].applyConstraints({ advanced: [{ cursor: wantCursor }] });
-    } catch (e) { /* cursor constraint unsupported — real cursor stays visible */ }
+  const isScreen = state.source.kind !== "window";
+  let nativeAvailable = false;
+  try { nativeAvailable = await window.studio.nativeCaptureAvailable(); } catch (e) {}
+  usingNativeCapture = nativeAvailable;
 
-    // macOS 15's system picker can override our source choice. Trust the
-    // track's actual surface type so cursor tracking & auto-zoom stay correct.
-    try {
-      const track0 = screenStream.getVideoTracks()[0];
-      const surf = (track0.getSettings && track0.getSettings().displaySurface) || "";
-      if (surf) {
-        const actuallyScreen = surf === "monitor";
-        if (actuallyScreen && !isScreen) {
-          // picked a screen in the system picker — find matching display bounds
-          const label = track0.label || "";
-          const screens = (state.allSources || []).filter(s => s.kind === "screen");
-          const prevSource = state.source;
-          state.source =
-            screens.find(s => label.includes(s.name) || s.name.includes(label)) ||
-            screens[0] || state.source;
-          isScreen = !!(state.source && state.source.bounds);
-          // a custom area was picked against a specific display — if the
-          // system picker swapped in a different one, the rect no longer applies
-          if (state.cropRect && state.source !== prevSource) state.cropRect = null;
-        } else if (!actuallyScreen && isScreen) {
-          // picked a window in the system picker — no cursor coordinates
-          state.source = { ...state.source, kind: "window", bounds: null };
-          isScreen = false;
-          state.cropRect = null;
-        }
-      }
-      // re-apply cursor hiding with the corrected surface type
-      await track0.applyConstraints({ advanced: [{ cursor: cursorMode() }] }).catch(() => {});
-    } catch (e) { /* keep original detection */ }
-    state.capCursorHidden = cursorMode() === "never";
-  } catch (e) {
-    // Fallback to the legacy capture path (cursor can't be hidden here)
-    try {
-      screenStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: state.source.id, maxFrameRate: 60 } },
-      });
-    } catch (e2) {
-      showErr("Screen capture failed — check Screen Recording permission in System Settings › Privacy & Security, then restart the app.");
-      return;
-    }
-  }
-
+  // Webcam/mic acquisition happens up front either way, so their permission
+  // prompts (if any) are out of the way before the countdown starts. Mic
+  // audio is now always its own recording (own blob, synced like the webcam
+  // clip) rather than muxed into the screen recording — the native capture
+  // path has no direct route for browser audio into its own encoder process.
   try {
     if (state.useCam || state.useMic) {
       const constraints = {};
@@ -853,38 +805,74 @@ $("btnStart").addEventListener("click", async () => {
   } catch (e) {
     showErr("Webcam/microphone permission denied — recording screen only.");
   }
-
   const audioTracks = micStream ? micStream.getAudioTracks() : [];
   state.hasAudio = audioTracks.length > 0;
   state.hasCam = !!camStream;
 
-  cropStopFn = null;
-  appliedCropRect = null;
-  let recordVideoTrack = screenStream.getVideoTracks()[0];
-  if (isScreen && state.cropRect && state.source.bounds) {
-    try {
-      const built = await buildCropTrack(screenStream, state.source, state.cropRect);
-      recordVideoTrack = built.track;
-      cropStopFn = built.stop;
-      appliedCropRect = state.cropRect;
-    } catch (e) {
-      console.warn("[studio] crop pipeline failed, recording full screen instead:", e);
-    }
-  }
-
-  const mainStream = new MediaStream([recordVideoTrack, ...audioTracks]);
-  const vidMime = pickMime(["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]);
-
-  screenChunks = []; camChunks = [];
-  screenRecorder = new MediaRecorder(mainStream, { mimeType: vidMime, videoBitsPerSecond: 14_000_000 });
-  screenRecorder.ondataavailable = (e) => { if (e.data.size) screenChunks.push(e.data); };
-
+  camChunks = []; micChunks = [];
   if (camStream) {
     camRecorder = new MediaRecorder(camStream, { mimeType: pickMime(["video/webm;codecs=vp9", "video/webm"]), videoBitsPerSecond: 4_000_000 });
     camRecorder.ondataavailable = (e) => { if (e.data.size) camChunks.push(e.data); };
   }
+  if (micStream) {
+    micRecorder = new MediaRecorder(micStream, { mimeType: pickMime(["audio/webm;codecs=opus", "audio/webm"]) });
+    micRecorder.ondataavailable = (e) => { if (e.data.size) micChunks.push(e.data); };
+  }
 
-  screenStream.getVideoTracks()[0].addEventListener("ended", () => stopRecording());
+  if (!nativeAvailable) {
+    // ---- Legacy path (non-mac, or the helper is missing): Electron
+    // desktopCapturer + getDisplayMedia, same as before. ----
+    let winTrack = false;
+    try { winTrack = await window.studio.winTracking(); } catch (e) {}
+    const cursorMode = () => (isScreen || winTrack) ? "never" : "always";
+    const wantCursor = cursorMode();
+    try {
+      window.studio.selectSource(state.source.id);
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        audio: false,
+        video: { frameRate: { ideal: 60 }, cursor: wantCursor },
+      });
+      try {
+        await screenStream.getVideoTracks()[0].applyConstraints({ advanced: [{ cursor: wantCursor }] });
+      } catch (e) { /* cursor constraint unsupported — real cursor stays visible */ }
+
+      // macOS 15's system picker can override our source choice. Trust the
+      // track's actual surface type so cursor tracking & auto-zoom stay correct.
+      try {
+        const track0 = screenStream.getVideoTracks()[0];
+        const surf = (track0.getSettings && track0.getSettings().displaySurface) || "";
+        if (surf) {
+          const actuallyScreen = surf === "monitor";
+          if (actuallyScreen && state.source.kind === "window") {
+            const label = track0.label || "";
+            const screens = (state.allSources || []).filter(s => s.kind === "screen");
+            const prevSource = state.source;
+            state.source =
+              screens.find(s => label.includes(s.name) || s.name.includes(label)) ||
+              screens[0] || state.source;
+            if (state.cropRect && state.source !== prevSource) state.cropRect = null;
+          } else if (!actuallyScreen && state.source.kind !== "window") {
+            state.source = { ...state.source, kind: "window", bounds: null };
+            state.cropRect = null;
+          }
+        }
+        await track0.applyConstraints({ advanced: [{ cursor: cursorMode() }] }).catch(() => {});
+      } catch (e) { /* keep original detection */ }
+      state.capCursorHidden = cursorMode() === "never";
+    } catch (e) {
+      // Fallback to the legacy capture path (cursor can't be hidden here)
+      try {
+        screenStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: state.source.id, maxFrameRate: 60 } },
+        });
+      } catch (e2) {
+        showErr("Screen capture failed — check Screen Recording permission in System Settings › Privacy & Security, then restart the app.");
+        return;
+      }
+    }
+    screenStream.getVideoTracks()[0].addEventListener("ended", () => stopRecording());
+  }
 
   switchScreen("recording");
   $("countdown").style.display = "block";
@@ -896,14 +884,58 @@ $("btnStart").addEventListener("click", async () => {
   $("countdown").style.display = "none";
   $("recLive").style.display = "flex";
 
+  if (nativeAvailable) {
+    // ---- Native ScreenCaptureKit capture: showsCursor is set to false on
+    // the actual capture stream (genuine exclusion, not a post-hoc mask),
+    // and cropping happens natively — no canvas/rAF workaround needed. ----
+    appliedCropRect = (isScreen && state.cropRect) ? state.cropRect : null;
+    try {
+      await window.studio.nativeCaptureStart({
+        kind: isScreen ? "screen" : "window",
+        displayBounds: isScreen ? state.source.bounds : null,
+        windowTitle: isScreen ? null : state.source.name,
+        crop: appliedCropRect,
+        fps: 60,
+      });
+    } catch (e) {
+      showErr("Screen capture failed: " + e.message);
+      switchScreen("setup");
+      return;
+    }
+    state.capCursorHidden = true;
+  } else {
+    cropStopFn = null;
+    appliedCropRect = null;
+    let recordVideoTrack = screenStream.getVideoTracks()[0];
+    if (state.source.kind !== "window" && state.cropRect && state.source.bounds) {
+      try {
+        const built = await buildCropTrack(screenStream, state.source, state.cropRect);
+        recordVideoTrack = built.track;
+        cropStopFn = built.stop;
+        appliedCropRect = state.cropRect;
+      } catch (e) {
+        console.warn("[studio] crop pipeline failed, recording full screen instead:", e);
+      }
+    }
+    const mainStream = new MediaStream([recordVideoTrack]);
+    const vidMime = pickMime(["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]);
+    screenChunks = [];
+    screenRecorder = new MediaRecorder(mainStream, { mimeType: vidMime, videoBitsPerSecond: 14_000_000 });
+    screenRecorder.ondataavailable = (e) => { if (e.data.size) screenChunks.push(e.data); };
+  }
+
   // Always track — cursor data is cheap and the surface type can be
   // corrected after the fact (system picker overrides, etc.)
   const trackInfo = await window.studio.trackStart();
   state.clicksAvailable = trackInfo.clicksAvailable;
 
-  screenRecorder.onstart = () => { recStartWall = Date.now(); };
-  screenRecorder.start(1000);
+  recStartWall = Date.now();
+  if (!nativeAvailable) {
+    screenRecorder.onstart = () => { recStartWall = Date.now(); };
+    screenRecorder.start(1000);
+  }
   if (camRecorder) camRecorder.start(1000);
+  if (micRecorder) micRecorder.start(1000);
 
   window.studio.minimize();
 
@@ -915,7 +947,8 @@ $("btnStart").addEventListener("click", async () => {
 
 let stopping = false;
 async function stopRecording() {
-  if (stopping || !screenRecorder || screenRecorder.state === "inactive") return;
+  if (stopping) return;
+  if (!usingNativeCapture && (!screenRecorder || screenRecorder.state === "inactive")) return;
   stopping = true;
   clearInterval(timerInterval);
 
@@ -927,15 +960,30 @@ async function stopRecording() {
   const winSamples = trackData.winSamples || [];
 
   const stopped = (rec) => new Promise(res => { rec.onstop = res; rec.stop(); });
-  await stopped(screenRecorder);
+  if (!usingNativeCapture) await stopped(screenRecorder);
   if (camRecorder && camRecorder.state !== "inactive") await stopped(camRecorder);
+  if (micRecorder && micRecorder.state !== "inactive") await stopped(micRecorder);
+
+  let capResult = null;
+  if (usingNativeCapture) capResult = await window.studio.nativeCaptureStop();
 
   if (cropStopFn) { cropStopFn(); cropStopFn = null; }
   [screenStream, camStream, micStream].forEach(s => s && s.getTracks().forEach(t => t.stop()));
   screenStream = camStream = micStream = null;
 
-  state.screenBlob = new Blob(screenChunks, { type: "video/webm" });
+  if (usingNativeCapture) {
+    if (capResult && capResult.path) {
+      const buf = await window.studio.nativeCaptureRead(capResult.path);
+      state.screenBlob = new Blob([buf], { type: "video/mp4" });
+    } else {
+      state.screenBlob = new Blob([], { type: "video/mp4" });
+    }
+  } else {
+    state.screenBlob = new Blob(screenChunks, { type: "video/webm" });
+  }
   state.camBlob = camChunks.length ? new Blob(camChunks, { type: "video/webm" }) : null;
+  const micMime = pickMime(["audio/webm;codecs=opus", "audio/webm"]) || "audio/webm";
+  state.micBlob = micChunks.length ? new Blob(micChunks, { type: micMime }) : null;
 
   // Normalize cursor events to recording-relative seconds + 0..1 display coords
   // (relative to the cropped area when a custom region was recorded)
@@ -998,6 +1046,7 @@ async function stopRecording() {
     try {
       await window.studio.recoverySave("screen.webm", await state.screenBlob.arrayBuffer());
       if (state.camBlob) await window.studio.recoverySave("cam.webm", await state.camBlob.arrayBuffer());
+      if (state.micBlob) await window.studio.recoverySave("mic.webm", await state.micBlob.arrayBuffer());
       await window.studio.recoverySave("meta.json", new TextEncoder().encode(JSON.stringify({
         cursorEvents: state.cursorEvents,
         clicksAvailable: state.clicksAvailable,
@@ -1005,6 +1054,7 @@ async function stopRecording() {
         hasCam: state.hasCam,
         sourceKind: state.source.kind,
         capCursorHidden: state.capCursorHidden,
+        videoMime: state.screenBlob.type,
       })).buffer);
     } catch (e) { console.warn("recovery save failed:", e); }
   })();
@@ -1022,10 +1072,11 @@ $("btnRestore").addEventListener("click", async () => {
   const data = await window.studio.recoveryLoad();
   if (!data) { showErr("No saved recording found."); return; }
   stopPreviews();
-  state.screenBlob = new Blob([data.screen], { type: "video/webm" });
-  state.camBlob = data.cam ? new Blob([data.cam], { type: "video/webm" }) : null;
   let meta = {};
   try { meta = JSON.parse(data.meta || "{}"); } catch (e) {}
+  state.screenBlob = new Blob([data.screen], { type: meta.videoMime || "video/webm" });
+  state.camBlob = data.cam ? new Blob([data.cam], { type: "video/webm" }) : null;
+  state.micBlob = data.mic ? new Blob([data.mic], { type: "audio/webm" }) : null;
   state.cursorEvents = meta.cursorEvents || [];
   state.clicksAvailable = !!meta.clicksAvailable;
   state.capCursorHidden = !!meta.capCursorHidden;
@@ -1045,6 +1096,7 @@ $("importFile").addEventListener("change", async (e) => {
   stopPreviews();
   state.screenBlob = f;
   state.camBlob = null;
+  state.micBlob = null;
   state.hasCam = false;
   state.hasAudio = true; // route whatever audio the file has
   state.cursorEvents = [];
@@ -1055,7 +1107,7 @@ $("importFile").addEventListener("change", async (e) => {
 });
 
 /* ================= Editor: load media ================= */
-const screenVid = $("screenVid"), camVid = $("camVid");
+const screenVid = $("screenVid"), camVid = $("camVid"), micAud = $("micAud");
 const preview = $("preview"), pctx = preview.getContext("2d");
 
 function loadVideo(el, blob) {
@@ -1077,6 +1129,7 @@ function loadVideo(el, blob) {
 async function openEditor() {
   await loadVideo(screenVid, state.screenBlob);
   if (state.camBlob) await loadVideo(camVid, state.camBlob);
+  if (state.micBlob) await loadVideo(micAud, state.micBlob);
 
   state.duration = screenVid.duration;
   state.trimStart = 0;
@@ -1765,6 +1818,7 @@ function renderLoop() {
   if (!state.exporting) {
     updateBroll(screenVid.currentTime);
     syncCam();
+    syncMicAud();
     drawFrame(pctx, preview.width, preview.height);
     updateTransportUI();
     if (state.playing) {
@@ -1785,12 +1839,14 @@ function play() {
   }
   screenVid.play();
   if (state.camBlob) camVid.play();
+  if (state.micBlob) micAud.play();
   state.playing = true;
   $("btnPlay").textContent = "❚❚";
 }
 function pause() {
   screenVid.pause();
   if (state.camBlob) camVid.pause();
+  if (state.micBlob) micAud.pause();
   state.playing = false;
   $("btnPlay").textContent = "▶";
 }
@@ -1798,6 +1854,7 @@ function seekTo(t) {
   t = clamp(t, 0, state.duration);
   screenVid.currentTime = t;
   if (state.camBlob) camVid.currentTime = Math.min(t, camVid.duration || t);
+  if (state.micBlob) micAud.currentTime = Math.min(t, micAud.duration || t);
 }
 
 // Keep the camera clip locked to the screen clip — recovers from stalls,
@@ -1810,6 +1867,17 @@ function syncCam() {
     camVid.play().catch(() => {});
   }
   if (!state.playing && !state.exporting && !camVid.paused) camVid.pause();
+}
+
+// Same drift-recovery treatment for the separately-recorded mic audio track.
+function syncMicAud() {
+  if (!state.micBlob || !micAud.duration || !isFinite(micAud.duration)) return;
+  const target = Math.min(screenVid.currentTime, Math.max(0, micAud.duration - 0.05));
+  if (Math.abs(micAud.currentTime - target) > 0.3) micAud.currentTime = target;
+  if ((state.playing || state.exporting) && micAud.paused && target < micAud.duration - 0.1) {
+    micAud.play().catch(() => {});
+  }
+  if (!state.playing && !state.exporting && !micAud.paused) micAud.pause();
 }
 $("btnPlay").addEventListener("click", () => state.playing ? pause() : play());
 document.addEventListener("keydown", (e) => {
@@ -2385,7 +2453,11 @@ function wireExportAudio() {
   if (!state.hasAudio) return [];
   if (!state.audioWired) {
     state.audioCtx = new AudioContext();
-    state.audioSrc = state.audioCtx.createMediaElementSource(screenVid);
+    // Mic audio is recorded as its own clip now (native capture's video has no
+    // audio route in) — use it when present; imported files still carry their
+    // own embedded audio directly on screenVid.
+    const audioSourceEl = state.micBlob ? micAud : screenVid;
+    state.audioSrc = state.audioCtx.createMediaElementSource(audioSourceEl);
     state.audioDest = state.audioCtx.createMediaStreamDestination();
     // voice enhancement chain: rumble filter -> presence boost -> compressor
     state.fxHp = state.audioCtx.createBiquadFilter();
@@ -2430,10 +2502,12 @@ async function exportVideo(fmt) {
 
   await seekAndWait(screenVid, state.trimStart);
   if (state.camBlob) await seekAndWait(camVid, Math.min(state.trimStart, camVid.duration || state.trimStart));
+  if (state.micBlob) await seekAndWait(micAud, Math.min(state.trimStart, micAud.duration || state.trimStart));
 
   rec.start(500);
   screenVid.play();
   if (state.camBlob) camVid.play();
+  if (state.micBlob) micAud.play();
 
   const total = state.trimEnd - state.trimStart;
   await new Promise((resolve) => {
@@ -2445,9 +2519,11 @@ async function exportVideo(fmt) {
         const target = Math.min(cut.end, state.trimEnd);
         screenVid.currentTime = target;
         if (state.camBlob) camVid.currentTime = Math.min(target, camVid.duration || target);
+        if (state.micBlob) micAud.currentTime = Math.min(target, micAud.duration || target);
       } else {
         updateBroll(screenVid.currentTime);
         syncCam();
+        syncMicAud();
         drawFrame(ctx, canvas.width, canvas.height);
       }
       const p = (screenVid.currentTime - state.trimStart) / total;
@@ -2459,6 +2535,7 @@ async function exportVideo(fmt) {
 
   screenVid.pause();
   if (state.camBlob) camVid.pause();
+  if (state.micBlob) micAud.pause();
   rec.stop();
   await done;
   const outBlob = new Blob(chunks, { type: fmt.mime.split(";")[0] });
