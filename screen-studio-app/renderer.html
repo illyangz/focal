@@ -950,6 +950,24 @@ async function stopRecording() {
   if (stopping) return;
   if (!usingNativeCapture && (!screenRecorder || screenRecorder.state === "inactive")) return;
   stopping = true;
+  try {
+    await stopRecordingInner();
+  } catch (e) {
+    // Whatever failed, don't leave the app stuck on the recording screen with
+    // no way to retry — both the Stop button and the hotkey funnel through
+    // this same function, and a stuck `stopping` flag would make both go dead.
+    console.error("[studio] stopRecording failed:", e);
+    try { await window.studio.nativeCaptureStop(); } catch (e2) {}
+    try { window.studio.restore(); } catch (e2) {}
+    clearInterval(timerInterval);
+    switchScreen("setup");
+    showErr("Recording failed to stop cleanly: " + e.message + " — please try recording again.");
+  } finally {
+    stopping = false;
+  }
+}
+
+async function stopRecordingInner() {
   clearInterval(timerInterval);
 
   const isScreenRec = state.source.kind !== "window" && state.source.bounds;
@@ -965,7 +983,7 @@ async function stopRecording() {
   if (micRecorder && micRecorder.state !== "inactive") await stopped(micRecorder);
 
   let capResult = null;
-  if (usingNativeCapture) capResult = await window.studio.nativeCaptureStop();
+  if (usingNativeCapture) capResult = await withTimeout(window.studio.nativeCaptureStop(), 12000, "native capture didn't stop in time");
 
   if (cropStopFn) { cropStopFn(); cropStopFn = null; }
   [screenStream, camStream, micStream].forEach(s => s && s.getTracks().forEach(t => t.stop()));
@@ -1039,7 +1057,6 @@ async function stopRecording() {
   }
 
   window.studio.restore();
-  stopping = false;
 
   // persist for crash/reload recovery (fire-and-forget)
   (async () => {

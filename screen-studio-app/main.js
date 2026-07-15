@@ -369,19 +369,28 @@ ipcMain.handle("native-capture-stop", () => {
     const proc = captureProc;
     const outPath = captureOutPath;
     let settled = false;
-    proc.stdout.on("data", (d) => {
-      if (d.toString().includes("DONE") && !settled) { /* let 'exit' resolve, just observed */ }
-    });
-    proc.on("exit", () => {
+    proc.on("exit", (code) => {
       if (settled) return;
       settled = true;
+      console.log(`[studio] capture helper exited (code ${code}) after stop request`);
       captureProc = null;
       captureOutPath = null;
       resolve({ path: outPath });
     });
-    try { proc.kill("SIGINT"); } catch {}
+    // Two independent ways to ask it to stop, in case one is ever missed —
+    // SIGINT (the primary path) and a plain stdin write (the helper also
+    // watches for a "stop" line on stdin as a fallback trigger).
+    try { proc.kill("SIGINT"); } catch (e) { console.warn("[studio] SIGINT failed:", e.message); }
+    try { proc.stdin.write("stop\n"); } catch (e) {}
+    // If it's still not dead after a few seconds, nudge again before giving up.
+    setTimeout(() => {
+      if (settled) return;
+      console.warn("[studio] capture helper hasn't exited 4s after stop — retrying SIGINT");
+      try { proc.kill("SIGINT"); } catch (e) {}
+    }, 4000);
     setTimeout(() => {
       if (!settled) {
+        console.warn("[studio] capture helper still alive after 8s — sending SIGKILL");
         settled = true;
         try { proc.kill("SIGKILL"); } catch {}
         captureProc = null;
@@ -393,9 +402,14 @@ ipcMain.handle("native-capture-stop", () => {
 });
 
 ipcMain.handle("native-capture-read", async (e, filePath) => {
-  const buf = fs.readFileSync(filePath);
-  try { fs.unlinkSync(filePath); } catch {}
-  return buf;
+  try {
+    const buf = fs.readFileSync(filePath);
+    try { fs.unlinkSync(filePath); } catch {}
+    return buf;
+  } catch (err) {
+    console.error("[studio] native-capture-read failed:", err.message);
+    throw new Error(`couldn't read recorded video (${err.message})`);
+  }
 });
 
 /* ---------- Crash/reload recovery: persist the last recording ---------- */
