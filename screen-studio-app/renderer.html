@@ -1053,12 +1053,28 @@ async function stopRecordingInner() {
       // resolution against the reported window size, and shrink the mapped
       // rect from the top so cursor coordinates line up with the video's
       // actual content instead of drifting up/off from the real cursor.
-      const mid = ws[Math.floor(ws.length / 2)] || ws[0];
+      // Uses the median across every matched sample (not just one arbitrary
+      // one) for stability, and only corrects for a large-enough, plausibly
+      // real structural offset — ScreenCaptureKit and System Events don't
+      // report window geometry byte-identically even for the same window,
+      // and "correcting" for that few-pixel measurement noise introduces
+      // more error than it removes.
       let chromeTop = 0;
-      if (capturedSize.width && capturedSize.height && mid.width && mid.height) {
-        const scale = capturedSize.width / mid.width;
-        const diffPx = mid.height * scale - capturedSize.height;
-        if (scale > 0 && Math.abs(diffPx) > 4) chromeTop = diffPx / scale;
+      let diffsDebug = null;
+      if (capturedSize.width && capturedSize.height) {
+        const diffs = ws
+          .filter(s => s.width && s.height)
+          .map(s => {
+            const scale = capturedSize.width / s.width;
+            return scale > 0 ? (s.height * scale - capturedSize.height) / scale : null;
+          })
+          .filter(d => d !== null)
+          .sort((a, b) => a - b);
+        if (diffs.length) {
+          const median = diffs[Math.floor(diffs.length / 2)];
+          diffsDebug = { n: diffs.length, min: Math.round(diffs[0]), max: Math.round(diffs[diffs.length - 1]), median: Math.round(median) };
+          if (Math.abs(median) > 15) chromeTop = median;
+        }
       }
       let droppedOutOfBounds = 0, droppedNoSample = 0;
       state.cursorEvents = rawEvents.map(e => {
@@ -1079,7 +1095,7 @@ async function stopRecordingInner() {
         totalSamples: winSamples.length, matched: ws.length,
         usedFallback: ws === winSamples, owner: nativeCaptureOwner,
         chromeTop: Math.round(chromeTop), droppedOutOfBounds, droppedNoSample,
-        kept: state.cursorEvents.length,
+        kept: state.cursorEvents.length, diffsDebug,
       };
     } else {
       state.cursorEvents = [];
@@ -1201,6 +1217,9 @@ async function openEditor() {
   if (state.debugWinMatch) {
     const m = state.debugWinMatch;
     diagText += ` · window match: ${m.usedFallback ? "fallback(all)" : "owner"} ${m.matched}/${m.totalSamples} samples, owner="${m.owner || ""}", chromeTop=${m.chromeTop}px, kept ${m.kept}/${m.kept + m.droppedOutOfBounds + m.droppedNoSample} (${m.droppedOutOfBounds} out-of-bounds, ${m.droppedNoSample} no-sample)`;
+    if (m.diffsDebug) {
+      diagText += ` · offset spread: n=${m.diffsDebug.n} min=${m.diffsDebug.min} median=${m.diffsDebug.median} max=${m.diffsDebug.max}`;
+    }
   }
   $("zoomDiag").textContent = diagText;
 
