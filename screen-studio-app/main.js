@@ -29,15 +29,32 @@ const AS_FRONT_WINDOW = [
   "-e", 'tell application "System Events"',
   "-e", "set frontProc to first application process whose frontmost is true",
   "-e", "set procName to name of frontProc",
-  "-e", "if (count of windows of frontProc) is 0 then",
+  "-e", "set winList to windows of frontProc",
+  "-e", "if (count of winList) is 0 then",
   "-e", 'return "" & "|" & "" & "|" & "" & "|" & "" & "|" & "" & "|" & procName',
   "-e", "end if",
-  "-e", "set w to front window of frontProc",
-  "-e", "set {posX, posY} to position of w",
+  // "front window" is fragile for apps that throw up lots of transient
+  // popups/palettes (command palettes, autocomplete, hover docs — exactly
+  // what a code editor does constantly): it can return whichever tiny popup
+  // happens to be frontmost at that instant instead of the actual main
+  // window, which then makes cursor-position math blow up completely
+  // (dividing by a near-zero width/height). Picking the largest window of
+  // the process instead is far more reliably "the window being recorded".
+  "-e", "set bestW to item 1 of winList",
+  "-e", "set bestArea to 0",
+  "-e", "repeat with w in winList",
   "-e", "set {sizeW, sizeH} to size of w",
+  "-e", "set thisArea to sizeW * sizeH",
+  "-e", "if thisArea > bestArea then",
+  "-e", "set bestArea to thisArea",
+  "-e", "set bestW to w",
+  "-e", "end if",
+  "-e", "end repeat",
+  "-e", "set {posX, posY} to position of bestW",
+  "-e", "set {sizeW, sizeH} to size of bestW",
   "-e", 'set wTitle to ""',
   "-e", "try",
-  "-e", "set wTitle to name of w",
+  "-e", "set wTitle to name of bestW",
   "-e", "end try",
   "-e", 'return (posX as string) & "|" & (posY as string) & "|" & (sizeW as string) & "|" & (sizeH as string) & "|" & wTitle & "|" & procName',
   "-e", "end tell",
