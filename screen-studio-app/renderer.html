@@ -144,18 +144,63 @@
   .topbar .logo-mark { width: 28px; height: 28px; border-radius: 8px; background: #fff; }
   .topbar .logo-mark img { width: 16px; height: 16px; display: block; }
   .topbar-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+
+  /* ---------- Help button, tips, tour ---------- */
+  .help-btn { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--panel2); color: var(--muted); font-size: 14px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
+  .help-btn:hover { border-color: var(--accent); color: var(--accent); }
+  #setupTopRow { position: fixed; top: 20px; right: 24px; z-index: 20; }
+
+  .tip-ico { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
+    border-radius: 50%; background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+    font-size: 10px; font-weight: 700; cursor: default; position: relative; flex-shrink: 0; }
+  .tip-ico:hover { border-color: var(--accent); color: var(--accent); }
+  .tip-ico::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%); width: 220px; background: #1c1c22; border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 11px; font-size: 11.5px; line-height: 1.45; color: var(--text);
+    font-weight: 400; text-align: left; opacity: 0; pointer-events: none; transition: opacity .12s;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4); z-index: 30; }
+  .tip-ico:hover::after { opacity: 1; }
+  h3.with-tip { display: flex; align-items: center; gap: 7px; }
+
+  /* Help modal */
+  #helpModal .help-body { max-height: 60vh; overflow-y: auto; padding-right: 6px; }
+  #helpModal section { margin-bottom: 18px; }
+  #helpModal section:last-child { margin-bottom: 0; }
+  #helpModal h4 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); margin-bottom: 8px; }
+  #helpModal p, #helpModal li { font-size: 13px; line-height: 1.55; color: var(--text); }
+  #helpModal ul { padding-left: 18px; margin-top: 4px; }
+  #helpModal li { margin-bottom: 4px; }
+  #helpModal b { color: var(--text); }
+
+  /* Guided tour */
+  #tourDim { position: fixed; inset: 0; z-index: 90; pointer-events: auto; cursor: default; display: none; }
+  #tourSpot { position: fixed; z-index: 91; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(6,6,8,.78);
+    border: 2px solid var(--accent); pointer-events: none; transition: all .25s ease; display: none; }
+  #tourCard { position: fixed; z-index: 92; width: 290px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.5); display: none; transition: all .25s ease; }
+  #tourCard .tourStep { font-size: 10.5px; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
+  #tourCard h4 { font-size: 14.5px; margin-bottom: 6px; }
+  #tourCard p { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin-bottom: 14px; }
+  #tourCard .tourBtns { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #tourCard .tourBtns .btn { padding: 7px 14px; font-size: 12px; }
+  #tourSkip { background: none; border: none; color: var(--muted); font-size: 11.5px; cursor: pointer; text-decoration: underline; padding: 4px; }
 </style>
 </head>
 <body>
 
 <!-- ============ SETUP ============ -->
 <div id="setup" class="screen active">
+  <div id="setupTopRow"><button class="help-btn" id="btnHelp" title="Help &amp; tutorial">?</button></div>
   <div class="logo"><div class="logo-mark"><img src="build/Video Icons.png" alt=""></div><h1>Focal</h1></div>
   <p class="tagline">Beautiful screen recordings with automatic zoom.</p>
   <div class="src-grid" id="srcGrid"></div>
   <div id="cropPanel" style="display:none; width:min(1060px, 92vw); background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px;">
     <div class="row" style="margin-bottom:0;">
-      <label>Record a custom area</label>
+      <label style="display:flex; align-items:center; gap:7px;">Record a custom area
+        <span class="tip-ico" data-tip="Only works for entire-screen recordings, not windows. Pick a screen above first, then turn this on.">i</span>
+      </label>
       <label class="switch"><input type="checkbox" id="ctlCropOn"><span class="sl"></span></label>
     </div>
     <div id="cropInfo" style="display:none; align-items:center; gap:10px; margin-top:10px;">
@@ -211,7 +256,10 @@
   <div class="stage">
     <div class="topbar">
       <div class="topbar-title"><div class="logo-mark"><img src="build/Video Icons.png" alt=""></div> Focal — Editor</div>
-      <button class="btn btn-ghost" id="btnNew" style="padding:8px 16px;font-size:13px;">← New recording</button>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button class="help-btn" id="btnHelpEditor" title="Help &amp; tutorial">?</button>
+        <button class="btn btn-ghost" id="btnNew" style="padding:8px 16px;font-size:13px;">← New recording</button>
+      </div>
     </div>
     <div class="stage-canvas-wrap"><canvas id="preview"></canvas></div>
     <div class="transport">
@@ -249,7 +297,7 @@
 
   <div class="sidebar">
     <div>
-      <h3>Zoom</h3>
+      <h3 class="with-tip">Zoom <span class="tip-ico" data-tip="Purple blocks on the timeline mark zoom moments, generated automatically from your clicks. Drag to move, drag edges to resize, double-click to remove.">i</span></h3>
       <div class="row">
         <label>Auto zoom</label>
         <label class="switch"><input type="checkbox" id="ctlZoomOn" checked><span class="sl"></span></label>
@@ -298,7 +346,7 @@
     </div>
 
     <div>
-      <h3>Masking</h3>
+      <h3 class="with-tip">Masking <span class="tip-ico" data-tip="Use this to blur out sensitive info (passwords, emails, etc). Add a mask, then drag it onto the preview to position it — it follows your zooms automatically.">i</span></h3>
       <div class="mini-btns"><button class="btn btn-ghost" id="btnMask">▦ Add mask</button></div>
       <div class="row" style="margin-top:8px;"><label>Width</label><input type="range" id="ctlMaskW" min="5" max="90" value="25"></div>
       <div class="row"><label>Height</label><input type="range" id="ctlMaskH" min="4" max="90" value="12"></div>
@@ -306,7 +354,7 @@
     </div>
 
     <div>
-      <h3>Cursor</h3>
+      <h3 class="with-tip">Cursor <span class="tip-ico" data-tip="The real cursor is excluded at recording time (window recordings only, when captured natively) and replaced with this vector cursor, redrawn from tracked mouse data — sharp at any zoom level.">i</span></h3>
       <div class="row">
         <label>Enhanced cursor</label>
         <label class="switch"><input type="checkbox" id="ctlCursorOn" checked><span class="sl"></span></label>
@@ -404,6 +452,71 @@
         <button class="btn btn-ghost" id="modalCancel" style="padding:9px 16px;font-size:13px;">Cancel</button>
         <button class="btn btn-primary" id="modalOk" style="padding:9px 16px;font-size:13px;">OK</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Help modal -->
+<div id="helpModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:60; align-items:center; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:24px; width:520px; max-width:92vw; display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-size:16px; font-weight:700;">How Focal works</div>
+      <button class="btn btn-ghost" id="btnHelpClose" style="padding:6px 12px; font-size:12px;">✕ Close</button>
+    </div>
+    <div class="help-body">
+      <section>
+        <h4>Getting Started</h4>
+        <ul>
+          <li>Pick <b>Entire screen</b> or a specific <b>window</b> from the grid.</li>
+          <li>For a screen, you can optionally turn on <b>Record a custom area</b> and drag out a region — this must be set before you hit record, not after.</li>
+          <li>Add a <b>Webcam</b> bubble or <b>Microphone</b> narration if you want them.</li>
+          <li>Hit <b>Start Recording</b> — after a 3-second countdown, Focal minimizes and recording begins. Clicks are tracked automatically for zoom.</li>
+          <li>Stop with the <b>Stop Recording</b> button, or press <b>⌘⇧S</b> (Ctrl+Shift+S) from any app.</li>
+        </ul>
+      </section>
+      <section>
+        <h4>Auto Zoom &amp; Cursor</h4>
+        <ul>
+          <li>Focal detects your clicks during recording and automatically creates zoom-in moments around them — no manual keyframing needed.</li>
+          <li>In the editor, purple blocks on the timeline are these zoom moments. Drag to move, drag the edges to resize, double-click to remove, or double-click the preview to re-aim one.</li>
+          <li>For window recordings, the real system cursor is excluded from the capture and replaced with a smooth vector cursor, redrawn from tracked mouse movement.</li>
+        </ul>
+      </section>
+      <section>
+        <h4>Editing</h4>
+        <ul>
+          <li><b>Timeline:</b> trim the start/end, or cut out sections entirely (they're skipped on export).</li>
+          <li><b>Overlays:</b> add text slides, draggable annotations, images, or B-roll clips at the playhead.</li>
+          <li><b>Masking:</b> pixelate sensitive info — the mask follows your zooms automatically.</li>
+          <li><b>Canvas / Background / Layout:</b> pick an aspect ratio, background, padding, corner radius, and shadow for the framed output.</li>
+        </ul>
+      </section>
+      <section>
+        <h4>Export</h4>
+        <ul>
+          <li>Choose a format and resolution, optionally enhance the voice track, then hit <b>Export Video</b>.</li>
+          <li>Use <b>Copy shareable link</b> afterward to upload and get a link (~30-day retention).</li>
+        </ul>
+      </section>
+    </div>
+    <div style="display:flex; justify-content:flex-end;">
+      <button class="btn btn-primary" id="btnTakeTour" style="padding:9px 18px; font-size:13px;">▶ Take the tour</button>
+    </div>
+  </div>
+</div>
+
+<!-- First-launch guided tour -->
+<div id="tourDim"></div>
+<div id="tourSpot"></div>
+<div id="tourCard">
+  <div class="tourStep" id="tourStepLabel"></div>
+  <h4 id="tourTitle"></h4>
+  <p id="tourText"></p>
+  <div class="tourBtns">
+    <button id="tourSkip">Skip</button>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-ghost" id="tourBack">Back</button>
+      <button class="btn btn-primary" id="tourNext">Next</button>
     </div>
   </div>
 </div>
@@ -526,6 +639,131 @@ async function loadSources() {
   updateCropPanel();
 }
 loadSources();
+
+/* ================= Help & guided tour ================= */
+const TOUR_STEPS = [
+  {
+    el: () => $("srcGrid"),
+    title: "Pick what to record",
+    text: "Choose an entire screen or a specific window. Screens can optionally be cropped to a custom area — next step.",
+  },
+  {
+    el: () => $("cropPanel"),
+    title: "Optional: record a custom area",
+    text: "For screen recordings only, drag out a specific region to record. Must be set now — it can't change once recording starts.",
+  },
+  {
+    el: () => document.querySelector(".options"),
+    title: "Webcam & microphone",
+    text: "Add a webcam bubble or microphone narration. Both are optional.",
+  },
+  {
+    el: () => $("btnStart"),
+    title: "Start recording",
+    text: "After a 3-second countdown, Focal minimizes and starts recording. Your clicks are tracked automatically to drive auto zoom — no manual keyframing needed. Stop anytime with ⌘⇧S (Ctrl+Shift+S).",
+  },
+  {
+    el: () => $("btnHelp"),
+    title: "Come back anytime",
+    text: "Click here whenever you need the full guide again, or to replay this tour.",
+  },
+];
+let tourIdx = 0;
+
+function tourRectFor(el) {
+  const r = el.getBoundingClientRect();
+  const pad = 8;
+  return { top: r.top - pad, left: r.left - pad, width: r.width + pad * 2, height: r.height + pad * 2 };
+}
+
+function showTourStep(i) {
+  // skip steps whose target isn't currently visible (e.g. cropPanel before a screen is picked)
+  const dir = i >= tourIdx ? 1 : -1;
+  while (i >= 0 && i < TOUR_STEPS.length) {
+    const el = TOUR_STEPS[i].el();
+    if (el && el.offsetParent !== null) break;
+    i += dir;
+  }
+  if (i < 0 || i >= TOUR_STEPS.length) { endTour(true); return; }
+  tourIdx = i;
+  const step = TOUR_STEPS[i];
+  const el = step.el();
+  const pos = tourRectFor(el);
+
+  const spot = $("tourSpot");
+  spot.style.display = "block";
+  spot.style.top = pos.top + "px";
+  spot.style.left = pos.left + "px";
+  spot.style.width = pos.width + "px";
+  spot.style.height = pos.height + "px";
+  $("tourDim").style.display = "block";
+
+  $("tourStepLabel").textContent = `Step ${i + 1} of ${TOUR_STEPS.length}`;
+  $("tourTitle").textContent = step.title;
+  $("tourText").textContent = step.text;
+
+  const card = $("tourCard");
+  card.style.display = "block";
+  const cardH = 190, cardW = 290;
+  let top = pos.top + pos.height + 14;
+  if (top + cardH > window.innerHeight) top = Math.max(14, pos.top - cardH - 14);
+  let left = pos.left + pos.width / 2 - cardW / 2;
+  left = Math.max(14, Math.min(left, window.innerWidth - cardW - 14));
+  card.style.top = top + "px";
+  card.style.left = left + "px";
+
+  $("tourBack").style.visibility = i === 0 ? "hidden" : "visible";
+  $("tourNext").textContent = i === TOUR_STEPS.length - 1 ? "Done" : "Next";
+}
+
+function startTour() {
+  closeHelp();
+  tourIdx = 0;
+  showTourStep(0);
+}
+function endTour(markSeen) {
+  $("tourDim").style.display = "none";
+  $("tourSpot").style.display = "none";
+  $("tourCard").style.display = "none";
+  if (markSeen) { try { localStorage.setItem("focal_tour_v1_seen", "1"); } catch (e) {} }
+}
+$("tourNext").addEventListener("click", () => {
+  if (tourIdx >= TOUR_STEPS.length - 1) { endTour(true); return; }
+  showTourStep(tourIdx + 1);
+});
+$("tourBack").addEventListener("click", () => showTourStep(tourIdx - 1));
+$("tourSkip").addEventListener("click", () => endTour(true));
+window.addEventListener("resize", () => { if ($("tourCard").style.display === "block") showTourStep(tourIdx); });
+
+function openHelp() { $("helpModal").style.display = "flex"; }
+function closeHelp() { $("helpModal").style.display = "none"; }
+$("btnHelp").addEventListener("click", openHelp);
+$("btnHelpEditor").addEventListener("click", openHelp);
+$("btnHelpClose").addEventListener("click", closeHelp);
+$("helpModal").addEventListener("click", (e) => { if (e.target.id === "helpModal") closeHelp(); });
+$("btnTakeTour").addEventListener("click", () => {
+  if (!$("setup").classList.contains("active")) { closeHelp(); return; }
+  startTour();
+});
+
+// Auto-show the tour once, the first time the app is opened — waits for
+// sources to actually populate so the first step has something to point at,
+// rather than guessing a fixed delay.
+(function maybeAutoTour() {
+  let seen = false;
+  try { seen = localStorage.getItem("focal_tour_v1_seen") === "1"; } catch (e) {}
+  if (seen) return;
+  let tries = 0;
+  const check = () => {
+    tries++;
+    if ($("srcGrid").children.length > 0 || tries > 20) {
+      if ($("setup").classList.contains("active")) startTour();
+    } else {
+      setTimeout(check, 300);
+    }
+  };
+  setTimeout(check, 500);
+})();
 
 /* ---- Custom-area selection (screen sources only) ---- */
 function updateCropPanel() {
