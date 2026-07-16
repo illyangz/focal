@@ -28,8 +28,9 @@ try {
 const AS_FRONT_WINDOW = [
   "-e", 'tell application "System Events"',
   "-e", "set frontProc to first application process whose frontmost is true",
+  "-e", "set procName to name of frontProc",
   "-e", "if (count of windows of frontProc) is 0 then",
-  "-e", 'return ""',
+  "-e", 'return "" & "|" & "" & "|" & "" & "|" & "" & "|" & "" & "|" & procName',
   "-e", "end if",
   "-e", "set w to front window of frontProc",
   "-e", "set {posX, posY} to position of w",
@@ -38,7 +39,7 @@ const AS_FRONT_WINDOW = [
   "-e", "try",
   "-e", "set wTitle to name of w",
   "-e", "end try",
-  "-e", 'return (posX as string) & "|" & (posY as string) & "|" & (sizeW as string) & "|" & (sizeH as string) & "|" & wTitle',
+  "-e", 'return (posX as string) & "|" & (posY as string) & "|" & (sizeW as string) & "|" & (sizeH as string) & "|" & wTitle & "|" & procName',
   "-e", "end tell",
 ];
 
@@ -46,12 +47,17 @@ function getFrontWindowBounds() {
   return new Promise((resolve) => {
     execFile("osascript", AS_FRONT_WINDOW, { timeout: 1500 }, (err, stdout) => {
       if (err) return resolve(null);
+      // Title (and in principle owner name) could themselves contain "|" —
+      // the last field is always the owner, everything between the fixed
+      // numeric fields and that last field is the title, rejoined.
       const parts = String(stdout).trim().split("|");
-      if (parts.length < 4) return resolve(null);
-      const [xs, ys, ws, hs, ...titleParts] = parts;
+      if (parts.length < 5) return resolve(null);
+      const [xs, ys, ws, hs] = parts;
+      const owner = parts[parts.length - 1];
+      const title = parts.slice(4, parts.length - 1).join("|");
       const x = parseFloat(xs), y = parseFloat(ys), width = parseFloat(ws), height = parseFloat(hs);
       if (![x, y, width, height].every(Number.isFinite)) return resolve(null);
-      resolve({ x, y, width, height, title: titleParts.join("|") });
+      resolve({ x, y, width, height, title, owner: owner || "" });
     });
   });
 }
@@ -254,6 +260,7 @@ ipcMain.handle("track-start", () => {
         winSamples.push({
           t: Date.now(),
           title: w.title,
+          owner: w.owner,
           x: w.x, y: w.y,
           width: w.width, height: w.height,
         });
@@ -330,6 +337,7 @@ ipcMain.handle("native-capture-start", (e, opts) => {
     let settled = false;
     let stderrBuf = "";
     let dims = null;
+    let owner = null;
     proc.stderr.on("data", (d) => { stderrBuf += d.toString(); });
     proc.stdout.on("data", (d) => {
       const lines = d.toString().split("\n");
@@ -338,11 +346,13 @@ ipcMain.handle("native-capture-start", (e, opts) => {
           const parts = line.trim().split(/\s+/);
           const width = parseInt(parts[1], 10), height = parseInt(parts[2], 10);
           if (Number.isFinite(width) && Number.isFinite(height)) dims = { width, height };
+        } else if (line.startsWith("OWNER ")) {
+          owner = line.slice("OWNER ".length).trim();
         } else if (line.startsWith("RECORDING") && !settled) {
           settled = true;
           captureProc = proc;
           captureOutPath = outPath;
-          resolve({ ok: true, dims });
+          resolve({ ok: true, dims, owner });
         } else if (line.startsWith("ERROR") && !settled) {
           settled = true;
           try { proc.kill("SIGKILL"); } catch {}

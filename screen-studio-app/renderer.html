@@ -713,6 +713,9 @@ let appliedCropRect = null; // the crop rect actually in effect for the current 
 let usingNativeCapture = false; // true when recording via the ScreenCaptureKit helper instead of getDisplayMedia
 let nativeCaptureDims = null;   // {width,height} the helper actually captured — for reconciling against
                                  // AppleScript-sampled window bounds used for cursor-position mapping
+let nativeCaptureOwner = null;  // owning app name of the resolved window, straight from ScreenCaptureKit —
+                                 // used to correlate cursor-tracking's window-bounds samples to the SAME
+                                 // window even if its title changes mid-recording (titles drift, apps don't)
 
 function pickMime(cands) {
   for (const c of cands) if (MediaRecorder.isTypeSupported(c)) return c;
@@ -900,6 +903,7 @@ $("btnStart").addEventListener("click", async () => {
         fps: 60,
       });
       nativeCaptureDims = (capRes && capRes.dims) || null;
+      nativeCaptureOwner = (capRes && capRes.owner) || null;
     } catch (e) {
       showErr("Screen capture failed: " + e.message);
       switchScreen("setup");
@@ -1024,8 +1028,18 @@ async function stopRecordingInner() {
     // Window recording: map global cursor coords into the recorded window's
     // space using the active-window bounds sampled during recording.
     const name = (state.source.name || "").trim();
-    let ws = winSamples.filter(s => s.title && name &&
-      (s.title === name || s.title.includes(name) || name.includes(s.title)));
+    let ws;
+    if (usingNativeCapture && nativeCaptureOwner) {
+      // Match by owning app name — reported directly by the same
+      // ScreenCaptureKit resolution that determined what got recorded, and
+      // stable even if the window's title changes mid-recording (a document
+      // gets saved, a page navigates), unlike fuzzy title matching below,
+      // which silently degrades sample-by-sample once titles drift.
+      ws = winSamples.filter(s => s.owner === nativeCaptureOwner);
+    } else {
+      ws = winSamples.filter(s => s.title && name &&
+        (s.title === name || s.title.includes(name) || name.includes(s.title)));
+    }
     if (!ws.length) ws = winSamples; // fall back: assume active window = recorded window
     if (ws.length) {
       // Some apps' captured window frame doesn't cover the full accessibility

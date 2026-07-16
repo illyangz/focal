@@ -175,11 +175,18 @@ func record(_ args: Args) async {
         abs(a.width - b.width) < tol && abs(a.height - b.height) < tol
     }
 
+    // Reported back to Electron once resolved (for a window target) so the
+    // cursor-tracking side can correlate against the SAME owning app instead
+    // of independently guessing — window titles can change mid-recording
+    // (a document gets saved, a page navigates), but the owning app doesn't.
+    var resolvedOwner: String? = nil
+
     if let wid = args.windowID, let target = content.windows.first(where: { $0.windowID == wid }) {
         filter = SCContentFilter(desktopIndependentWindow: target)
         originPoint = target.frame.origin
         pointW = target.frame.width
         pointH = target.frame.height
+        resolvedOwner = target.owningApplication?.applicationName
     } else if let did = args.displayID, let target = content.displays.first(where: { $0.displayID == did }) {
         filter = SCContentFilter(display: target, excludingWindows: [])
         originPoint = target.frame.origin
@@ -206,6 +213,7 @@ func record(_ args: Args) async {
         originPoint = target.frame.origin
         pointW = target.frame.width
         pointH = target.frame.height
+        resolvedOwner = target.owningApplication?.applicationName
     } else if let wantedBounds = args.displayBounds {
         guard let target = content.displays.first(where: { boundsClose($0.frame, wantedBounds) }) else {
             print("ERROR: no display matching bounds \(wantedBounds) found")
@@ -374,6 +382,7 @@ func record(_ args: Args) async {
                 // bounds used for cursor-position mapping (the two APIs don't
                 // always agree, e.g. on whether the title bar is included).
                 print("DIMENSIONS \(outW) \(outH)")
+                if let owner = resolvedOwner { print("OWNER \(owner)") }
                 print("RECORDING \(args.outPath)")
                 trace("TRACE: startCapture task block ending normally")
             } catch {
