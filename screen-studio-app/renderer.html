@@ -1035,7 +1035,11 @@ async function stopRecordingInner() {
       // stable even if the window's title changes mid-recording (a document
       // gets saved, a page navigates), unlike fuzzy title matching below,
       // which silently degrades sample-by-sample once titles drift.
-      ws = winSamples.filter(s => s.owner === nativeCaptureOwner);
+      // Case-insensitive: ScreenCaptureKit and System Events don't always
+      // agree on casing for the same app (e.g. "Zed" vs "zed") even though
+      // it's the exact same process.
+      const ownerWanted = nativeCaptureOwner.trim().toLowerCase();
+      ws = winSamples.filter(s => s.owner && s.owner.trim().toLowerCase() === ownerWanted);
     } else {
       ws = winSamples.filter(s => s.title && name &&
         (s.title === name || s.title.includes(name) || name.includes(s.title)));
@@ -1056,20 +1060,27 @@ async function stopRecordingInner() {
         const diffPx = mid.height * scale - capturedSize.height;
         if (scale > 0 && Math.abs(diffPx) > 4) chromeTop = diffPx / scale;
       }
+      let droppedOutOfBounds = 0, droppedNoSample = 0;
       state.cursorEvents = rawEvents.map(e => {
         let best = null;
         for (const s of ws) {
           const d = Math.abs(s.t - e.t);
           if (!best || d < best.d) best = { s, d };
         }
-        if (!best || best.d > 3000) return null;
+        if (!best || best.d > 3000) { droppedNoSample++; return null; }
         const b = best.s;
         const top = b.y + chromeTop, height = b.height - chromeTop;
         const x = (e.x - b.x) / b.width, y = (e.y - top) / height;
         // drop moments when the cursor was outside the recorded window
-        if (x < -0.05 || x > 1.05 || y < -0.05 || y > 1.05) return null;
+        if (x < -0.05 || x > 1.05 || y < -0.05 || y > 1.05) { droppedOutOfBounds++; return null; }
         return { t: (e.t - recStartWall) / 1000, x: clamp(x, 0, 1), y: clamp(y, 0, 1), c: e.c };
       }).filter(e => e && e.t >= 0);
+      state.debugWinMatch = {
+        totalSamples: winSamples.length, matched: ws.length,
+        usedFallback: ws === winSamples, owner: nativeCaptureOwner,
+        chromeTop: Math.round(chromeTop), droppedOutOfBounds, droppedNoSample,
+        kept: state.cursorEvents.length,
+      };
     } else {
       state.cursorEvents = [];
     }
@@ -1186,8 +1197,12 @@ async function openEditor() {
   renderZoomBlocks();
 
   const moveCount = state.cursorEvents.filter(e => e.c === 0).length;
-  $("zoomDiag").textContent =
-    `Diagnostics — surface: ${state.source.kind || "screen"} · cursor samples: ${moveCount} · clicks: ${state.clicks.length} · click hook: ${state.clicksAvailable ? "active" : "OFF (grant Accessibility in System Settings, then restart)"}`;
+  let diagText = `Diagnostics — surface: ${state.source.kind || "screen"} · cursor samples: ${moveCount} · clicks: ${state.clicks.length} · click hook: ${state.clicksAvailable ? "active" : "OFF (grant Accessibility in System Settings, then restart)"}`;
+  if (state.debugWinMatch) {
+    const m = state.debugWinMatch;
+    diagText += ` · window match: ${m.usedFallback ? "fallback(all)" : "owner"} ${m.matched}/${m.totalSamples} samples, owner="${m.owner || ""}", chromeTop=${m.chromeTop}px, kept ${m.kept}/${m.kept + m.droppedOutOfBounds + m.droppedNoSample} (${m.droppedOutOfBounds} out-of-bounds, ${m.droppedNoSample} no-sample)`;
+  }
+  $("zoomDiag").textContent = diagText;
 
   const hasCursorData = state.cursorEvents.length > 0;
   if (!hasCursorData) {
