@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focal — Beautiful screen recordings with automatic zoom</title>
+<meta name="description" content="Focal records your screen and automatically zooms in on your clicks — no manual keyframing. Native cursor handling, custom-area recording, and a full built-in editor.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><rect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%23fff%22/><path d=%22M6 8h8v8H6z%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%222%22/><path d=%22M14 10l4-2v8l-4-2z%22 fill=%22%23000%22/></svg>">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0d; --panel: #131318; --panel2: #1a1a21; --border: #26262f;
+    --text: #f2f2f5; --muted: #96969f; --accent: #49d34c; --accent2: #2f3a20;
+    --radius: 16px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg); color: var(--text);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+  img, svg { display: block; max-width: 100%; }
+
+  /* ---------- nav ---------- */
+  nav { position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    background: rgba(10,10,13,.72); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+  nav .inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px; max-width: 1180px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: .2px; }
+  .brand .mark { width: 30px; height: 30px; border-radius: 9px; background: #fff; display: flex; align-items: center; justify-content: center; }
+  .brand .mark svg { width: 17px; height: 17px; }
+  nav .navlinks { display: flex; align-items: center; gap: 28px; font-size: 13px; color: var(--muted); }
+  nav .navlinks a { text-decoration: none; transition: color .15s; }
+  nav .navlinks a:hover { color: var(--text); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: none; border-radius: 10px;
+    padding: 12px 22px; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: inherit;
+    text-decoration: none; transition: all .15s; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: #06140a; }
+  .btn-primary:hover { background: #5ce65f; transform: translateY(-1px); }
+  .btn-ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: #3d3d4a; }
+  .btn-sm { padding: 9px 16px; font-size: 12.5px; }
+
+  /* ---------- hero ---------- */
+  header.hero { padding: 200px 28px 120px; position: relative; overflow: hidden; }
+  .glow { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .35; pointer-events: none; z-index: 0; }
+  .glow1 { width: 560px; height: 560px; background: radial-gradient(circle, var(--accent), transparent 70%); top: -220px; left: 50%; transform: translateX(-60%); }
+  .glow2 { width: 420px; height: 420px; background: radial-gradient(circle, #4facfe, transparent 70%); top: 60px; right: -120px; opacity: .18; }
+  .hero-inner { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; text-align: center; }
+  .kicker { display: inline-flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 100px; padding: 7px 16px; font-size: 12px; color: var(--muted); margin-bottom: 28px; }
+  .kicker .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  h1.headline { font-size: 58px; font-weight: 800; line-height: 1.08; letter-spacing: -1.5px; margin-bottom: 22px; }
+  h1.headline .accent-word { color: var(--accent); }
+  .sub { font-size: 17px; color: var(--muted); line-height: 1.6; max-width: 560px; margin: 0 auto 40px; }
+  .cta-row { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .cta-row .btn { padding: 15px 26px; font-size: 14.5px; }
+  .cta-note { font-size: 11.5px; color: var(--muted); opacity: .8; }
+
+  /* ---------- hero visual (real product demo video) ---------- */
+  .mock-wrap { margin: 72px auto 0; max-width: 920px; position: relative; z-index: 1; }
+  .mock { background: linear-gradient(180deg, var(--panel), #0e0e12); border: 1px solid var(--border); border-radius: 18px;
+    box-shadow: 0 40px 100px rgba(0,0,0,.55); overflow: hidden; }
+  .mock-bar { display: flex; align-items: center; gap: 7px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+  .mock-bar span { width: 10px; height: 10px; border-radius: 50%; background: #333; }
+  /* Crop applied to the top of the source video only — adjust --demo-crop-top
+     (in px, at the video's native 1920x1080 resolution) and nothing else
+     needs to change. */
+  .demo-stage { position: relative; aspect-ratio: 16/9; overflow: hidden; background: #000; --demo-crop-top: 0px; }
+  .demo-video { position: absolute; left: 0; top: 0; width: 100%;
+    height: calc(100% + var(--demo-crop-top)); margin-top: calc(-1 * var(--demo-crop-top));
+    object-fit: cover; object-position: center top; display: block; }
+  /* ---------- sections ---------- */
+  section { padding: 110px 28px; }
+  .section-head { max-width: 620px; margin: 0 auto 64px; text-align: center; }
+  .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: var(--accent); font-weight: 700; margin-bottom: 14px; }
+  h2 { font-size: 36px; font-weight: 800; letter-spacing: -.8px; margin-bottom: 16px; line-height: 1.2; }
+  .section-head p { color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+  .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1180px; margin: 0 auto; }
+  .feat-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 26px;
+    opacity: 0; transform: translateY(28px); }
+  .feat-ico { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    font-size: 21px; margin-bottom: 18px; background: var(--accent2); }
+  .feat-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 9px; }
+  .feat-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  /* ---------- how it works ---------- */
+  .steps { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 0; }
+  .step { display: flex; gap: 28px; padding: 34px 0; border-bottom: 1px solid var(--border); opacity: 0; transform: translateX(-24px); }
+  .step:last-child { border-bottom: none; }
+  .step-num { flex-shrink: 0; width: 46px; height: 46px; border-radius: 50%; background: var(--panel2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--accent); font-size: 15px; }
+  .step-body h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+  .step-body p { font-size: 13.5px; color: var(--muted); line-height: 1.65; max-width: 560px; }
+
+  /* ---------- download ---------- */
+  .dl-section { text-align: center; }
+  .dl-cards { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-top: 46px; }
+  .dl-card { width: 280px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 30px 26px; text-align: left; opacity: 0; transform: translateY(24px); }
+  .dl-card .plat-ico { font-size: 30px; margin-bottom: 16px; }
+  .dl-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+  .dl-card .req { font-size: 11.5px; color: var(--muted); margin-bottom: 20px; }
+  .dl-card .btn { width: 100%; }
+  .dl-foot { margin-top: 28px; font-size: 12px; color: var(--muted); max-width: 560px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+
+  /* ---------- footer ---------- */
+  footer { border-top: 1px solid var(--border); padding: 40px 28px; }
+  .foot-inner { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--muted); }
+  .foot-inner .brand { font-size: 13px; }
+
+  @media (max-width: 880px) {
+    h1.headline { font-size: 38px; }
+    .feat-grid { grid-template-columns: 1fr; }
+    nav .navlinks { display: none; }
+    .glow2 { display: none; }
+  }
+
+  /* theme-aware: this page defaults to dark (matches the app), but respect an explicit light override */
+  :root[data-theme="light"] body { background: #f5f5f7; color: #16161a; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="inner">
+    <div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2"><rect x="4" y="7" width="12" height="10" rx="2"/><path d="M16 10l4-2.4v8.8l-4-2.4z" fill="#000" stroke="none"/></svg></div>Focal</div>
+    <div class="navlinks">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#download">Download</a>
+    </div>
+    <a href="#download" class="btn btn-primary btn-sm">Download</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="glow glow1"></div>
+  <div class="glow glow2"></div>
+  <div class="hero-inner">
+    <div class="kicker"><span class="dot"></span> Free · macOS &amp; Windows</div>
+    <h1 class="headline">Screen recordings that <span class="accent-word">zoom themselves.</span></h1>
+    <p class="sub">Focal records your screen and automatically zooms in on your clicks — no manual keyframing, no editing skills required. Just record, and it looks produced.</p>
+    <div class="cta-row">
+      <a href="downloads/Focal-Mac.dmg" class="btn btn-primary" id="dlMac">⌘ Download for Mac</a>
+      <a href="downloads/Focal-Windows-Setup.exe" class="btn btn-ghost" id="dlWin">⊞ Download for Windows</a>
+    </div>
+    <div class="cta-note">macOS 13+ (Apple Silicon) · Windows 10+ (64-bit) · Free, no account needed</div>
+  </div>
+
+  <div class="mock-wrap" id="heroMock">
+    <div class="mock">
+      <div class="mock-bar"><span style="background:#e05a4f"></span><span style="background:#e0b23f"></span><span style="background:#3fb95a"></span></div>
+      <div class="demo-stage" id="demoStage">
+        <video class="demo-video" id="demoVideo" src="assets/demo.mp4" autoplay muted loop playsinline></video>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Features</div>
+      <h2>Everything a screencast needs, automatically.</h2>
+      <p>Focal handles the parts that usually take an editor — you just record.</p>
+    </div>
+    <div class="feat-grid" id="featGrid">
+      <div class="feat-card"><div class="feat-ico">🔍</div><h3>Automatic zoom on click</h3><p>Focal tracks your clicks while recording and generates smooth zoom-in moments around them — no manual keyframing. Every block is still fully editable afterward.</p></div>
+      <div class="feat-card"><div class="feat-ico">➤</div><h3>Real cursor handling</h3><p>The system cursor is excluded at the recording level, not just blurred over, then redrawn as a crisp vector cursor from tracked mouse data — sharp at any zoom.</p></div>
+      <div class="feat-card"><div class="feat-ico">▢</div><h3>Custom area recording</h3><p>Don't record your whole screen — drag out exactly the region you want before you start, down to the pixel.</p></div>
+      <div class="feat-card"><div class="feat-ico">🤳</div><h3>Webcam &amp; microphone</h3><p>Add a webcam bubble and narrate over your recording. Voice enhancement cleans up the audio automatically on export.</p></div>
+      <div class="feat-card"><div class="feat-ico">▦</div><h3>Sensitive-info masking</h3><p>Pixelate passwords, emails, or anything else you don't want visible — masks track your zooms automatically.</p></div>
+      <div class="feat-card"><div class="feat-ico">✂</div><h3>Full built-in editor</h3><p>Trim, cut sections, add text slides and annotations, drop in B-roll, then style the frame — background, padding, corner radius, shadow.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">How it works</div>
+      <h2>Record. It edits itself. Share.</h2>
+      <p>Three steps, no timeline scrubbing required to get something worth sending.</p>
+    </div>
+    <div class="steps" id="stepsList">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><h3>Pick a screen, window, or custom area</h3><p>Choose exactly what to record — an entire display, a single window, or a cropped region you drag out yourself.</p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><h3>Record like normal</h3><p>Focal minimizes out of the way. Talk, click, work — every click is quietly logged to drive the zoom later.</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><h3>Open the editor — it's already mostly done</h3><p>Zoom moments are generated automatically. Trim, add a few annotations if you want, then export or copy a shareable link.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="download" class="dl-section">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Download</div>
+      <h2>Get Focal, free.</h2>
+      <p>Pick your platform below.</p>
+    </div>
+    <div class="dl-cards" id="dlCards">
+      <div class="dl-card">
+        <div class="plat-ico">🍎</div>
+        <h3>Focal for Mac</h3>
+        <div class="req">macOS 13 Ventura or later · Apple Silicon</div>
+        <a href="downloads/Focal-Mac.dmg" class="btn btn-primary">Download .dmg</a>
+      </div>
+      <div class="dl-card">
+        <div class="plat-ico">🪟</div>
+        <h3>Focal for Windows</h3>
+        <div class="req">Windows 10 or later · 64-bit</div>
+        <a href="downloads/Focal-Windows-Setup.exe" class="btn btn-primary">Download .exe</a>
+      </div>
+    </div>
+    <p class="dl-foot">Focal isn't code-signed by an registered developer yet, so both operating systems will warn you on first launch. On Mac: right-click the app → Open. On Windows: click "More info" → "Run anyway" in the SmartScreen prompt.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="foot-inner">
+    <div class="brand">Focal</div>
+    <div>Beautiful screen recordings with automatic zoom.</div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+  // Belt-and-suspenders: nothing on this page should ever be permanently
+  // invisible just because a CDN script was slow, blocked by an extension,
+  // or errored — a marketing page's download buttons in particular must
+  // always end up visible no matter what. Anything with a scroll-reveal
+  // CSS default (opacity:0 in the stylesheet) gets force-shown here
+  // regardless of whether GSAP/ScrollTrigger ever ran.
+  function forceReveal() {
+    document.querySelectorAll(".feat-card, .step, .dl-card, .section-head, .cta-row .btn, .cta-note, .kicker, .headline, .sub, #heroMock")
+      .forEach(el => { el.style.opacity = 1; el.style.transform = "none"; });
+  }
+  window.addEventListener("load", () => setTimeout(forceReveal, 2500));
+
+  try {
+    if (window.gsap && window.ScrollTrigger) {
+      gsap.registerPlugin(ScrollTrigger);
+
+      // Hero entrance — decorative only. The actual download buttons are
+      // NOT part of this chain (see note above): a fragile multi-step
+      // animation is the wrong place to gate a page's primary CTA.
+      gsap.timeline({ defaults: { ease: "power3.out" } })
+        .from(".kicker", { opacity: 0, y: -10, duration: .5 })
+        .from(".headline", { opacity: 0, y: 18, duration: .7 }, "-=.3")
+        .from(".sub", { opacity: 0, y: 14, duration: .6 }, "-=.4")
+        .from(".cta-note", { opacity: 0, duration: .5 }, "-=.2")
+        .from("#heroMock", { opacity: 0, y: 40, duration: .8 }, "-=.3");
+
+      // A subtler, safer entrance for the buttons themselves: a quick
+      // fade-up that's already resolved almost immediately, rather than
+      // waiting in a long dependent chain.
+      gsap.from(".cta-row .btn", { opacity: 0, y: 8, duration: .4, stagger: .08, delay: .15, ease: "power2.out" });
+
+      // Feature cards / steps / download cards
+      ScrollTrigger.batch(".feat-card", {
+        start: "top 88%",
+        onEnter: batch => gsap.to(batch, { opacity: 1, y: 0, duration: .6, stagger: .12, ease: "power2.out" }),
+        once: true,
+      });
+      ScrollTrigger.batch(".step", {
+        start: "top 85%",
+        onEnter: batch => gsap.to(batch, { opacity: 1, x: 0, duration: .6, stagger: .15, ease: "power2.out" }),
+        once: true,
+      });
+      ScrollTrigger.batch(".dl-card", {
+        start: "top 88%",
+        onEnter: batch => gsap.to(batch, { opacity: 1, y: 0, duration: .6, stagger: .15, ease: "power2.out" }),
+        once: true,
+      });
+
+      // Section headers: gentle fade-up
+      document.querySelectorAll(".section-head").forEach(el => {
+        gsap.from(el, {
+          opacity: 0, y: 24, duration: .7, ease: "power2.out",
+          scrollTrigger: { trigger: el, start: "top 85%" },
+        });
+      });
+    } else {
+      console.warn("[focal-landing] GSAP/ScrollTrigger unavailable — showing content statically.");
+      forceReveal();
+    }
+  } catch (e) {
+    console.error("[focal-landing] animation setup failed, showing content statically:", e);
+    forceReveal();
+  }
+</script>
+</body>
+</html>
