@@ -355,6 +355,7 @@ ipcMain.handle("native-capture-start", (e, opts) => {
     let stderrBuf = "";
     let dims = null;
     let owner = null;
+    let frame = null;
     proc.stderr.on("data", (d) => { stderrBuf += d.toString(); });
     proc.stdout.on("data", (d) => {
       const lines = d.toString().split("\n");
@@ -365,11 +366,15 @@ ipcMain.handle("native-capture-start", (e, opts) => {
           if (Number.isFinite(width) && Number.isFinite(height)) dims = { width, height };
         } else if (line.startsWith("OWNER ")) {
           owner = line.slice("OWNER ".length).trim();
+        } else if (line.startsWith("WINDOWFRAME")) {
+          const parts = line.trim().split(/\s+/);
+          const [x, y, width, height] = parts.slice(1).map(Number);
+          if ([x, y, width, height].every(Number.isFinite)) frame = { x, y, width, height };
         } else if (line.startsWith("RECORDING") && !settled) {
           settled = true;
           captureProc = proc;
           captureOutPath = outPath;
-          resolve({ ok: true, dims, owner });
+          resolve({ ok: true, dims, owner, frame });
         } else if (line.startsWith("ERROR") && !settled) {
           settled = true;
           try { proc.kill("SIGKILL"); } catch {}

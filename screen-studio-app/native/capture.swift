@@ -383,6 +383,13 @@ func record(_ args: Args) async {
                 // always agree, e.g. on whether the title bar is included).
                 print("DIMENSIONS \(outW) \(outH)")
                 if let owner = resolvedOwner { print("OWNER \(owner)") }
+                // The exact frame ScreenCaptureKit resolved (origin + size, in
+                // the same point-coordinate space as everything else) — the
+                // renderer uses this as ground truth for cursor mapping
+                // instead of heuristically reconciling it against System
+                // Events' independently-measured frame, which doesn't always
+                // agree byte-for-byte even for the literal same window.
+                print("WINDOWFRAME \(originPoint.x) \(originPoint.y) \(pointW) \(pointH)")
                 print("RECORDING \(args.outPath)")
                 trace("TRACE: startCapture task block ending normally")
             } catch {

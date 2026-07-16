@@ -716,6 +716,10 @@ let nativeCaptureDims = null;   // {width,height} the helper actually captured �
 let nativeCaptureOwner = null;  // owning app name of the resolved window, straight from ScreenCaptureKit —
                                  // used to correlate cursor-tracking's window-bounds samples to the SAME
                                  // window even if its title changes mid-recording (titles drift, apps don't)
+let nativeCaptureFrame = null;  // {x,y,width,height} the exact SCWindow frame ScreenCaptureKit resolved —
+                                 // ground truth for cursor mapping; AppleScript samples only track how much
+                                 // the window has moved since, not its size (the two APIs' sizes don't
+                                 // always agree, e.g. on whether a title bar counts as part of the window)
 
 function pickMime(cands) {
   for (const c of cands) if (MediaRecorder.isTypeSupported(c)) return c;
@@ -904,6 +908,7 @@ $("btnStart").addEventListener("click", async () => {
       });
       nativeCaptureDims = (capRes && capRes.dims) || null;
       nativeCaptureOwner = (capRes && capRes.owner) || null;
+      nativeCaptureFrame = (capRes && capRes.frame) || null;
     } catch (e) {
       showErr("Screen capture failed: " + e.message);
       switchScreen("setup");
@@ -1045,20 +1050,47 @@ async function stopRecordingInner() {
         (s.title === name || s.title.includes(name) || name.includes(s.title)));
     }
     if (!ws.length) ws = winSamples; // fall back: assume active window = recorded window
-    if (ws.length) {
-      // Some apps' captured window frame doesn't cover the full accessibility
-      // window bounds (most commonly: the title bar isn't actually in the
-      // captured pixels even though System Events reports it as part of the
-      // window). Detect that by comparing the live track's real captured
-      // resolution against the reported window size, and shrink the mapped
-      // rect from the top so cursor coordinates line up with the video's
-      // actual content instead of drifting up/off from the real cursor.
-      // Uses the median across every matched sample (not just one arbitrary
-      // one) for stability, and only corrects for a large-enough, plausibly
-      // real structural offset — ScreenCaptureKit and System Events don't
-      // report window geometry byte-identically even for the same window,
-      // and "correcting" for that few-pixel measurement noise introduces
-      // more error than it removes.
+    if (ws.length && usingNativeCapture && nativeCaptureFrame) {
+      // Ground truth: the EXACT frame ScreenCaptureKit resolved (same
+      // coordinate space, and literally what determined the video's
+      // content) — no need to reconcile it against System Events'
+      // independently-measured size at all, which is what the heuristic
+      // "chromeTop" correction below was doing (and never quite nailing,
+      // since the two APIs don't report window geometry byte-identically
+      // even for the literal same window). Track window movement via the
+      // delta between each moment's AppleScript sample and a reference
+      // sample near recording start — both from the same API, so a delta
+      // between them is trustworthy even though neither's absolute frame
+      // matches ScreenCaptureKit's exactly.
+      const ref = ws[0];
+      const fw = nativeCaptureFrame;
+      let droppedOutOfBounds = 0, droppedNoSample = 0;
+      state.cursorEvents = rawEvents.map(e => {
+        let best = null;
+        for (const s of ws) {
+          const d = Math.abs(s.t - e.t);
+          if (!best || d < best.d) best = { s, d };
+        }
+        if (!best || best.d > 3000) { droppedNoSample++; return null; }
+        const s = best.s;
+        const originX = fw.x + (s.x - ref.x), originY = fw.y + (s.y - ref.y);
+        const x = (e.x - originX) / fw.width, y = (e.y - originY) / fw.height;
+        if (x < -0.05 || x > 1.05 || y < -0.05 || y > 1.05) { droppedOutOfBounds++; return null; }
+        return { t: (e.t - recStartWall) / 1000, x: clamp(x, 0, 1), y: clamp(y, 0, 1), c: e.c };
+      }).filter(e => e && e.t >= 0);
+      state.debugWinMatch = {
+        method: "exact-frame", totalSamples: winSamples.length, matched: ws.length,
+        usedFallback: ws === winSamples, owner: nativeCaptureOwner,
+        droppedOutOfBounds, droppedNoSample, kept: state.cursorEvents.length,
+      };
+    } else if (ws.length) {
+      // Legacy fallback path (no known exact ScreenCaptureKit frame — e.g.
+      // getDisplayMedia recording): reconcile System Events' window size
+      // against the actually-captured resolution with a heuristic offset,
+      // since there's no better ground truth available here. Uses the
+      // median across every matched sample for stability, and only corrects
+      // for a large-enough, plausibly real structural difference — small
+      // deltas are just measurement noise between the two APIs.
       let chromeTop = 0;
       let diffsDebug = null;
       if (capturedSize.width && capturedSize.height) {
@@ -1092,7 +1124,7 @@ async function stopRecordingInner() {
         return { t: (e.t - recStartWall) / 1000, x: clamp(x, 0, 1), y: clamp(y, 0, 1), c: e.c };
       }).filter(e => e && e.t >= 0);
       state.debugWinMatch = {
-        totalSamples: winSamples.length, matched: ws.length,
+        method: "heuristic", totalSamples: winSamples.length, matched: ws.length,
         usedFallback: ws === winSamples, owner: nativeCaptureOwner,
         chromeTop: Math.round(chromeTop), droppedOutOfBounds, droppedNoSample,
         kept: state.cursorEvents.length, diffsDebug,
@@ -1216,7 +1248,7 @@ async function openEditor() {
   let diagText = `Diagnostics — surface: ${state.source.kind || "screen"} · cursor samples: ${moveCount} · clicks: ${state.clicks.length} · click hook: ${state.clicksAvailable ? "active" : "OFF (grant Accessibility in System Settings, then restart)"}`;
   if (state.debugWinMatch) {
     const m = state.debugWinMatch;
-    diagText += ` · window match: ${m.usedFallback ? "fallback(all)" : "owner"} ${m.matched}/${m.totalSamples} samples, owner="${m.owner || ""}", chromeTop=${m.chromeTop}px, kept ${m.kept}/${m.kept + m.droppedOutOfBounds + m.droppedNoSample} (${m.droppedOutOfBounds} out-of-bounds, ${m.droppedNoSample} no-sample)`;
+    diagText += ` · window match[${m.method}]: ${m.usedFallback ? "fallback(all)" : "owner"} ${m.matched}/${m.totalSamples} samples, owner="${m.owner || ""}"${m.method === "heuristic" ? `, chromeTop=${m.chromeTop}px` : ""}, kept ${m.kept}/${m.kept + m.droppedOutOfBounds + m.droppedNoSample} (${m.droppedOutOfBounds} out-of-bounds, ${m.droppedNoSample} no-sample)`;
     if (m.diffsDebug) {
       diagText += ` · offset spread: n=${m.diffsDebug.n} min=${m.diffsDebug.min} median=${m.diffsDebug.median} max=${m.diffsDebug.max}`;
     }
