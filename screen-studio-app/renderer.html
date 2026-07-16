@@ -711,6 +711,8 @@ let recStartWall = 0, timerInterval = null;
 let cropStopFn = null;      // stops the live-crop draw loop, if a custom area is being recorded (legacy path only)
 let appliedCropRect = null; // the crop rect actually in effect for the current recording (or null)
 let usingNativeCapture = false; // true when recording via the ScreenCaptureKit helper instead of getDisplayMedia
+let nativeCaptureDims = null;   // {width,height} the helper actually captured — for reconciling against
+                                 // AppleScript-sampled window bounds used for cursor-position mapping
 
 function pickMime(cands) {
   for (const c of cands) if (MediaRecorder.isTypeSupported(c)) return c;
@@ -890,13 +892,14 @@ $("btnStart").addEventListener("click", async () => {
     // and cropping happens natively — no canvas/rAF workaround needed. ----
     appliedCropRect = (isScreen && state.cropRect) ? state.cropRect : null;
     try {
-      await window.studio.nativeCaptureStart({
+      const capRes = await window.studio.nativeCaptureStart({
         kind: isScreen ? "screen" : "window",
         displayBounds: isScreen ? state.source.bounds : null,
         windowTitle: isScreen ? null : state.source.name,
         crop: appliedCropRect,
         fps: 60,
       });
+      nativeCaptureDims = (capRes && capRes.dims) || null;
     } catch (e) {
       showErr("Screen capture failed: " + e.message);
       switchScreen("setup");
@@ -972,7 +975,9 @@ async function stopRecordingInner() {
 
   const isScreenRec = state.source.kind !== "window" && state.source.bounds;
   const liveVideoTrack = screenStream && screenStream.getVideoTracks()[0];
-  const capturedSize = (liveVideoTrack && liveVideoTrack.getSettings) ? liveVideoTrack.getSettings() : {};
+  const capturedSize = usingNativeCapture
+    ? (nativeCaptureDims || {})
+    : ((liveVideoTrack && liveVideoTrack.getSettings) ? liveVideoTrack.getSettings() : {});
   const trackData = await window.studio.trackStop(); // always stop the poller
   const rawEvents = trackData.events || trackData || [];
   const winSamples = trackData.winSamples || [];

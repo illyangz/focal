@@ -329,15 +329,20 @@ ipcMain.handle("native-capture-start", (e, opts) => {
     const proc = spawn(captureHelperPath, args, { stdio: ["pipe", "pipe", "pipe"] });
     let settled = false;
     let stderrBuf = "";
+    let dims = null;
     proc.stderr.on("data", (d) => { stderrBuf += d.toString(); });
     proc.stdout.on("data", (d) => {
       const lines = d.toString().split("\n");
       for (const line of lines) {
-        if (line.startsWith("RECORDING") && !settled) {
+        if (line.startsWith("DIMENSIONS")) {
+          const parts = line.trim().split(/\s+/);
+          const width = parseInt(parts[1], 10), height = parseInt(parts[2], 10);
+          if (Number.isFinite(width) && Number.isFinite(height)) dims = { width, height };
+        } else if (line.startsWith("RECORDING") && !settled) {
           settled = true;
           captureProc = proc;
           captureOutPath = outPath;
-          resolve({ ok: true });
+          resolve({ ok: true, dims });
         } else if (line.startsWith("ERROR") && !settled) {
           settled = true;
           try { proc.kill("SIGKILL"); } catch {}

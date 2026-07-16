@@ -368,6 +368,12 @@ func record(_ args: Args) async {
             do {
                 trace("TRACE: calling startCapture")
                 try await stream.startCapture()
+                // Report the actual output pixel dimensions — the renderer
+                // needs this to reconcile ScreenCaptureKit's idea of the
+                // window's frame against the separately AppleScript-sampled
+                // bounds used for cursor-position mapping (the two APIs don't
+                // always agree, e.g. on whether the title bar is included).
+                print("DIMENSIONS \(outW) \(outH)")
                 print("RECORDING \(args.outPath)")
                 trace("TRACE: startCapture task block ending normally")
             } catch {
