@@ -297,7 +297,7 @@
 
   <div class="sidebar">
     <div>
-      <h3 class="with-tip">Zoom <span class="tip-ico" data-tip="Purple blocks on the timeline mark zoom moments, generated automatically from your clicks. Drag to move, drag edges to resize, double-click to remove.">i</span></h3>
+      <h3 class="with-tip" id="zoomHeading">Zoom <span class="tip-ico" data-tip="Purple blocks on the timeline mark zoom moments, generated automatically from your clicks. Drag to move, drag edges to resize, double-click to remove.">i</span></h3>
       <div class="row">
         <label>Auto zoom</label>
         <label class="switch"><input type="checkbox" id="ctlZoomOn" checked><span class="sl"></span></label>
@@ -346,7 +346,7 @@
     </div>
 
     <div>
-      <h3 class="with-tip">Masking <span class="tip-ico" data-tip="Use this to blur out sensitive info (passwords, emails, etc). Add a mask, then drag it onto the preview to position it — it follows your zooms automatically.">i</span></h3>
+      <h3 class="with-tip" id="maskingHeading">Masking <span class="tip-ico" data-tip="Use this to blur out sensitive info (passwords, emails, etc). Add a mask, then drag it onto the preview to position it — it follows your zooms automatically.">i</span></h3>
       <div class="mini-btns"><button class="btn btn-ghost" id="btnMask">▦ Add mask</button></div>
       <div class="row" style="margin-top:8px;"><label>Width</label><input type="range" id="ctlMaskW" min="5" max="90" value="25"></div>
       <div class="row"><label>Height</label><input type="range" id="ctlMaskH" min="4" max="90" value="12"></div>
@@ -354,7 +354,7 @@
     </div>
 
     <div>
-      <h3 class="with-tip">Cursor <span class="tip-ico" data-tip="The real cursor is excluded at recording time (window recordings only, when captured natively) and replaced with this vector cursor, redrawn from tracked mouse data — sharp at any zoom level.">i</span></h3>
+      <h3 class="with-tip" id="cursorHeading">Cursor <span class="tip-ico" data-tip="The real cursor is excluded at recording time (window recordings only, when captured natively) and replaced with this vector cursor, redrawn from tracked mouse data — sharp at any zoom level.">i</span></h3>
       <div class="row">
         <label>Enhanced cursor</label>
         <label class="switch"><input type="checkbox" id="ctlCursorOn" checked><span class="sl"></span></label>
@@ -641,7 +641,7 @@ async function loadSources() {
 loadSources();
 
 /* ================= Help & guided tour ================= */
-const TOUR_STEPS = [
+const SETUP_TOUR_STEPS = [
   {
     el: () => $("srcGrid"),
     title: "Pick what to record",
@@ -668,7 +668,43 @@ const TOUR_STEPS = [
     text: "Click here whenever you need the full guide again, or to replay this tour.",
   },
 ];
+
+const EDITOR_TOUR_STEPS = [
+  {
+    el: () => $("preview"),
+    title: "Your live preview",
+    text: "This shows exactly what will export — background, padding, zoom, cursor, and all. Drag the playhead on the timeline below to scrub around.",
+  },
+  {
+    el: () => $("timeline"),
+    title: "The timeline",
+    text: "Purple blocks are zoom moments, generated automatically from your clicks — drag to move, drag the edges to resize, double-click to remove. Drag the outer handles to trim the start/end.",
+  },
+  {
+    el: () => $("zoomHeading"),
+    title: "Zoom",
+    text: "Auto zoom needs no manual keyframing — it's driven by your clicks. Select a purple block to fine-tune just that one, or adjust the defaults here.",
+  },
+  {
+    el: () => $("cursorHeading"),
+    title: "Cursor",
+    text: "Your cursor is redrawn as a smooth vector from tracked mouse data — adjust its size, smoothing, and click highlights here.",
+  },
+  {
+    el: () => $("maskingHeading"),
+    title: "Masking",
+    text: "Blur out anything sensitive on screen — passwords, emails, etc. Add a mask, then drag it into place on the preview; it tracks your zooms automatically.",
+  },
+  {
+    el: () => document.querySelector(".export-box"),
+    title: "Export",
+    text: "Pick a format and resolution, optionally enhance the voice track, then export. \"Copy shareable link\" uploads it and gives you a link afterward.",
+  },
+];
+
 let tourIdx = 0;
+let currentTourSteps = SETUP_TOUR_STEPS;
+let currentTourSeenKey = "focal_tour_setup_v1_seen";
 
 function tourRectFor(el) {
   const r = el.getBoundingClientRect();
@@ -679,14 +715,14 @@ function tourRectFor(el) {
 function showTourStep(i) {
   // skip steps whose target isn't currently visible (e.g. cropPanel before a screen is picked)
   const dir = i >= tourIdx ? 1 : -1;
-  while (i >= 0 && i < TOUR_STEPS.length) {
-    const el = TOUR_STEPS[i].el();
+  while (i >= 0 && i < currentTourSteps.length) {
+    const el = currentTourSteps[i].el();
     if (el && el.offsetParent !== null) break;
     i += dir;
   }
-  if (i < 0 || i >= TOUR_STEPS.length) { endTour(true); return; }
+  if (i < 0 || i >= currentTourSteps.length) { endTour(true); return; }
   tourIdx = i;
-  const step = TOUR_STEPS[i];
+  const step = currentTourSteps[i];
   const el = step.el();
   const pos = tourRectFor(el);
 
@@ -698,7 +734,7 @@ function showTourStep(i) {
   spot.style.height = pos.height + "px";
   $("tourDim").style.display = "block";
 
-  $("tourStepLabel").textContent = `Step ${i + 1} of ${TOUR_STEPS.length}`;
+  $("tourStepLabel").textContent = `Step ${i + 1} of ${currentTourSteps.length}`;
   $("tourTitle").textContent = step.title;
   $("tourText").textContent = step.text;
 
@@ -726,11 +762,13 @@ function showTourStep(i) {
   card.style.visibility = "visible";
 
   $("tourBack").style.visibility = i === 0 ? "hidden" : "visible";
-  $("tourNext").textContent = i === TOUR_STEPS.length - 1 ? "Done" : "Next";
+  $("tourNext").textContent = i === currentTourSteps.length - 1 ? "Done" : "Next";
 }
 
-function startTour() {
+function startTour(steps, seenKey) {
   closeHelp();
+  currentTourSteps = steps;
+  currentTourSeenKey = seenKey;
   tourIdx = 0;
   showTourStep(0);
 }
@@ -738,10 +776,10 @@ function endTour(markSeen) {
   $("tourDim").style.display = "none";
   $("tourSpot").style.display = "none";
   $("tourCard").style.display = "none";
-  if (markSeen) { try { localStorage.setItem("focal_tour_v1_seen", "1"); } catch (e) {} }
+  if (markSeen) { try { localStorage.setItem(currentTourSeenKey, "1"); } catch (e) {} }
 }
 $("tourNext").addEventListener("click", () => {
-  if (tourIdx >= TOUR_STEPS.length - 1) { endTour(true); return; }
+  if (tourIdx >= currentTourSteps.length - 1) { endTour(true); return; }
   showTourStep(tourIdx + 1);
 });
 $("tourBack").addEventListener("click", () => showTourStep(tourIdx - 1));
@@ -755,28 +793,40 @@ $("btnHelpEditor").addEventListener("click", openHelp);
 $("btnHelpClose").addEventListener("click", closeHelp);
 $("helpModal").addEventListener("click", (e) => { if (e.target.id === "helpModal") closeHelp(); });
 $("btnTakeTour").addEventListener("click", () => {
-  if (!$("setup").classList.contains("active")) { closeHelp(); return; }
-  startTour();
+  if ($("editor").classList.contains("active")) startTour(EDITOR_TOUR_STEPS, "focal_tour_editor_v1_seen");
+  else if ($("setup").classList.contains("active")) startTour(SETUP_TOUR_STEPS, "focal_tour_setup_v1_seen");
+  else closeHelp();
 });
 
-// Auto-show the tour once, the first time the app is opened — waits for
-// sources to actually populate so the first step has something to point at,
-// rather than guessing a fixed delay.
+// Auto-show the setup tour once, the first time the app is opened — waits
+// for sources to actually populate so the first step has something to point
+// at, rather than guessing a fixed delay.
 (function maybeAutoTour() {
   let seen = false;
-  try { seen = localStorage.getItem("focal_tour_v1_seen") === "1"; } catch (e) {}
+  try { seen = localStorage.getItem("focal_tour_setup_v1_seen") === "1"; } catch (e) {}
   if (seen) return;
   let tries = 0;
   const check = () => {
     tries++;
     if ($("srcGrid").children.length > 0 || tries > 20) {
-      if ($("setup").classList.contains("active")) startTour();
+      if ($("setup").classList.contains("active")) startTour(SETUP_TOUR_STEPS, "focal_tour_setup_v1_seen");
     } else {
       setTimeout(check, 300);
     }
   };
   setTimeout(check, 500);
 })();
+
+// Auto-show the editor tour once, the first time the editor screen is shown
+// (after a recording, import, or restore) — called from openEditor().
+function maybeAutoEditorTour() {
+  let seen = false;
+  try { seen = localStorage.getItem("focal_tour_editor_v1_seen") === "1"; } catch (e) {}
+  if (seen) return;
+  setTimeout(() => {
+    if ($("editor").classList.contains("active")) startTour(EDITOR_TOUR_STEPS, "focal_tour_editor_v1_seen");
+  }, 500);
+}
 
 /* ---- Custom-area selection (screen sources only) ---- */
 function updateCropPanel() {
@@ -1524,6 +1574,7 @@ async function openEditor() {
   switchScreen("editor");
   seekTo(0);
   requestAnimationFrame(renderLoop);
+  maybeAutoEditorTour();
 }
 
 /* ================= Cursor track & smoothing ================= */
