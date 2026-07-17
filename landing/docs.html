@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docs — Focal</title>
+<meta name="description" content="How to use Focal: recording, auto zoom, the built-in editor, and export.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><rect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%23fff%22/><path d=%22M6 8h8v8H6z%22 fill=%22none%22 stroke=%22%23000%22 stroke-width=%222%22/><path d=%22M14 10l4-2v8l-4-2z%22 fill=%22%23000%22/></svg>">
+<link rel="stylesheet" href="style.css">
+<style>
+  .docs-shell { display: flex; max-width: 1180px; margin: 0 auto; padding: 130px 28px 100px; gap: 56px; align-items: flex-start; }
+  .docs-toc { position: sticky; top: 100px; width: 220px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
+  .docs-toc a { display: block; padding: 7px 12px; border-radius: 8px; font-size: 13px; color: var(--muted);
+    text-decoration: none; transition: all .15s; border-left: 2px solid transparent; }
+  .docs-toc a:hover { color: var(--text); background: var(--panel2); }
+  .docs-toc a.active { color: var(--accent); border-left-color: var(--accent); background: var(--panel2); }
+  .docs-toc .toc-group { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted);
+    opacity: .7; margin: 18px 0 6px 12px; }
+  .docs-toc .toc-group:first-child { margin-top: 0; }
+
+  .docs-content { flex: 1; min-width: 0; max-width: 720px; }
+  .docs-content > header { margin-bottom: 48px; }
+  .docs-content > header h1 { font-size: 34px; font-weight: 800; letter-spacing: -.8px; margin-bottom: 12px; }
+  .docs-content > header p { color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+  .doc-section { padding-top: 8px; margin-bottom: 56px; scroll-margin-top: 90px; }
+  .doc-section h2 { font-size: 22px; font-weight: 700; letter-spacing: -.3px; margin-bottom: 6px; }
+  .doc-section > .doc-sub { color: var(--muted); font-size: 13.5px; margin-bottom: 22px; line-height: 1.6; }
+  .doc-section h3 { font-size: 14.5px; font-weight: 700; margin: 22px 0 8px; color: var(--text); }
+  .doc-section p { font-size: 14px; color: #cfcfd6; line-height: 1.75; margin-bottom: 14px; }
+  .doc-section ul, .doc-section ol { padding-left: 20px; margin-bottom: 14px; }
+  .doc-section li { font-size: 14px; color: #cfcfd6; line-height: 1.75; margin-bottom: 6px; }
+  .doc-section b { color: var(--text); }
+  .doc-section code { background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+    padding: 2px 6px; font-size: 12.5px; color: var(--accent); }
+  .doc-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin: 16px 0; }
+  .doc-card.warn { border-color: #6b5a1e; background: #1c1710; }
+  .doc-card p:last-child { margin-bottom: 0; }
+  .kbd { display: inline-block; background: var(--panel2); border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; color: var(--text); }
+  .doc-table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 13px; }
+  .doc-table th, .doc-table td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  .doc-table th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; }
+  .doc-table td { color: #cfcfd6; }
+
+  @media (max-width: 880px) {
+    .docs-toc { display: none; }
+    .docs-shell { padding-top: 110px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="shaderBg"></div>
+<div id="shaderBlur"></div>
+
+<nav>
+  <div class="inner">
+    <a href="index.html" class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2"><rect x="4" y="7" width="12" height="10" rx="2"/><path d="M16 10l4-2.4v8.8l-4-2.4z" fill="#000" stroke="none"/></svg></div>Focal</a>
+    <div class="navlinks">
+      <a href="index.html#features">Features</a>
+      <a href="index.html#how">How it works</a>
+      <a href="docs.html" class="active">Docs</a>
+    </div>
+    <a href="index.html#download" class="cosmic-btn">
+      <span class="cosmic-border"></span><span class="cosmic-noise"></span>
+      <span class="cosmic-inner" style="padding:8px 18px; font-size:12.5px;">Download</span>
+    </a>
+  </div>
+</nav>
+
+<div class="docs-shell">
+  <aside class="docs-toc" id="docsToc">
+    <div class="toc-group">Basics</div>
+    <a href="#getting-started">Getting started</a>
+    <a href="#permissions">Permissions</a>
+    <a href="#recording">Recording</a>
+    <div class="toc-group">Auto editing</div>
+    <a href="#auto-zoom">Auto zoom</a>
+    <a href="#cursor">Cursor</a>
+    <a href="#masking">Masking</a>
+    <div class="toc-group">Editor</div>
+    <a href="#editing">Timeline &amp; styling</a>
+    <a href="#export">Export &amp; share</a>
+    <div class="toc-group">Reference</div>
+    <a href="#shortcuts">Shortcuts</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+  </aside>
+
+  <main class="docs-content">
+    <header>
+      <h1>Documentation</h1>
+      <p>Everything you need to know to record, auto-edit, and share with Focal.</p>
+    </header>
+
+    <section class="doc-section" id="getting-started">
+      <h2>Getting started</h2>
+      <p class="doc-sub">The whole flow in five steps.</p>
+      <ol>
+        <li>Open Focal and pick what to record — an <b>entire screen</b> or a specific <b>window</b>.</li>
+        <li>Optionally turn on <b>Record a custom area</b> (screens only) and drag out the exact region you want.</li>
+        <li>Turn on <b>Webcam</b> and/or <b>Microphone</b> if you want them included.</li>
+        <li>Click <b>Start Recording</b>. After a 3-second countdown, Focal minimizes out of the way and recording begins.</li>
+        <li>Do whatever you're recording. Click normally — Focal is quietly tracking clicks in the background to drive auto zoom later.</li>
+      </ol>
+      <p>When you're done, stop recording and the editor opens automatically with zoom moments already generated.</p>
+    </section>
+
+    <section class="doc-section" id="permissions">
+      <h2>Permissions</h2>
+      <p class="doc-sub">macOS requires two permissions the first time you record. Windows doesn't need either.</p>
+      <table class="doc-table">
+        <tr><th>Permission</th><th>What it's for</th><th>If you skip it</th></tr>
+        <tr><td>Screen Recording</td><td>Required to capture anything at all</td><td>Recording can't start</td></tr>
+        <tr><td>Accessibility</td><td>Lets Focal detect clicks for auto zoom</td><td>Zoom falls back to detecting cursor pauses instead of clicks — still works, just less precise</td></tr>
+      </table>
+      <div class="doc-card">
+        <p>macOS should prompt for both automatically the first time you record. If you dismissed a prompt or it never appeared, grant them manually in <b>System Settings → Privacy &amp; Security → Screen Recording</b> (and <b>→ Accessibility</b>), then relaunch Focal.</p>
+      </div>
+    </section>
+
+    <section class="doc-section" id="recording">
+      <h2>Recording</h2>
+      <h3>Entire screen vs. window</h3>
+      <p>Pick from the source grid on launch. Screens support a custom recording area; windows are recorded at their actual size and follow the window if it moves.</p>
+      <h3>Custom area</h3>
+      <p>For screen sources only. Turn on <b>Record a custom area</b>, then drag out the exact rectangle to record. This has to be set <b>before</b> you hit Start — it can't be changed mid-recording.</p>
+      <h3>Webcam &amp; microphone</h3>
+      <p>Both optional, both toggled from the setup screen before recording. The webcam appears as a draggable, resizable bubble in the editor afterward; microphone audio gets its own track, with an optional voice-enhancement pass on export.</p>
+      <h3>Stopping</h3>
+      <p>Click <b>Stop Recording</b> in the (now-minimized) Focal window, or press <span class="kbd">⌘⇧S</span> / <span class="kbd">Ctrl+Shift+S</span> from anywhere — it works even while another app is focused.</p>
+    </section>
+
+    <section class="doc-section" id="auto-zoom">
+      <h2>Auto zoom</h2>
+      <p class="doc-sub">The core feature — no manual keyframing required.</p>
+      <p>While you record, Focal logs every click. When you open the editor, nearby clicks (close in time and screen position) get grouped into zoom-in moments automatically — shown as purple blocks on the timeline.</p>
+      <h3>Editing a zoom block</h3>
+      <ul>
+        <li><b>Drag</b> a block to move it in time.</li>
+        <li><b>Drag its edges</b> to stretch or shorten it.</li>
+        <li><b>Double-click</b> a block to remove it.</li>
+        <li><b>Double-click the preview</b> while a block is selected to re-aim where it zooms.</li>
+        <li>Use <b>+ Add at playhead</b> to manually insert a zoom anywhere.</li>
+      </ul>
+      <p>Zoom level, whether it follows the cursor while zoomed, and glide (transition) speed are all adjustable from the Zoom panel — either as new defaults, or for just the selected block.</p>
+    </section>
+
+    <section class="doc-section" id="cursor">
+      <h2>Cursor</h2>
+      <p>For window recordings on macOS, the real system cursor is excluded from the capture itself (not just visually covered up) and redrawn as a clean vector cursor from the tracked mouse path — so it stays sharp no matter how far you zoom in.</p>
+      <p>From the Cursor panel you can adjust size, smoothing, click highlight rings, auto-hide when idle, and whether it glides back to its start position for a loopable clip.</p>
+    </section>
+
+    <section class="doc-section" id="masking">
+      <h2>Masking</h2>
+      <p>Use masks to pixelate anything you don't want visible — passwords, emails, account numbers. Add a mask, then drag it into place directly on the preview. Masks track your zooms automatically, so they stay correctly positioned even as the view zooms and pans.</p>
+    </section>
+
+    <section class="doc-section" id="editing">
+      <h2>Timeline &amp; styling</h2>
+      <h3>Timeline</h3>
+      <p>Trim the start or end with the outer handles, or select a section and cut it out entirely — cut sections are skipped on export, shown as a red hatched block on the timeline.</p>
+      <h3>Overlays</h3>
+      <p>Add text slides, draggable annotations, images, or B-roll video clips, all placed at the current playhead position.</p>
+      <h3>Canvas, background &amp; layout</h3>
+      <p>Pick an aspect ratio (16:9, 9:16, 1:1, 4:3), a background (preset gradient, solid color, or your own image), and adjust padding, corner radius, and shadow for the framed look.</p>
+    </section>
+
+    <section class="doc-section" id="export">
+      <h2>Export &amp; share</h2>
+      <p>Choose a format and resolution, optionally enable voice enhancement (a filtering/compression chain for clearer narration), then hit <b>Export Video</b>.</p>
+      <p>After exporting, <b>Copy shareable link</b> uploads the file and gives you a link to send — no account needed, roughly 30-day retention.</p>
+    </section>
+
+    <section class="doc-section" id="shortcuts">
+      <h2>Shortcuts</h2>
+      <table class="doc-table">
+        <tr><th>Shortcut</th><th>Action</th></tr>
+        <tr><td><span class="kbd">⌘⇧S</span> / <span class="kbd">Ctrl+Shift+S</span></td><td>Stop recording, from any app</td></tr>
+      </table>
+    </section>
+
+    <section class="doc-section" id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <div class="doc-card warn">
+        <p><b>"Focal can't be opened" / SmartScreen warning</b> — Focal isn't code-signed by a registered developer yet, so both operating systems flag a fresh install. On Mac: right-click the app in Finder → <b>Open</b> (only needed once). On Windows: click <b>More info</b> → <b>Run anyway</b> in the SmartScreen prompt.</p>
+      </div>
+      <h3>No cursor data / clicks aren't generating zooms</h3>
+      <p>Check the diagnostics line in the editor's Zoom panel — it shows whether the click hook is active. If it says permission is missing, grant Accessibility access (see <a href="#permissions" style="color:var(--accent);">Permissions</a>) and restart Focal.</p>
+      <h3>Custom area option is missing</h3>
+      <p>It only appears for <b>screen</b> sources, not windows — pick an entire-screen source first.</p>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="foot-inner">
+    <div class="brand">Focal</div>
+    <div>Beautiful screen recordings with automatic zoom.</div>
+  </div>
+</footer>
+
+<script type="module">
+  try {
+    const React = await import("https://esm.sh/react@18");
+    const { createRoot } = await import("https://esm.sh/react-dom@18/client");
+    const { Dithering } = await import("https://esm.sh/@paper-design/shaders-react@latest?deps=react@18,react-dom@18");
+    const mount = document.getElementById("shaderBg");
+    createRoot(mount).render(
+      React.createElement(Dithering, {
+        style: { width: "100%", height: "100%" },
+        colorBack: "#0a0a0d",
+        colorFront: "#49d34c",
+        shape: "simplex",
+        type: "2x2",
+        size: 2.5,
+        speed: 0.38,
+      })
+    );
+  } catch (e) {
+    console.warn("[focal-docs] shader background unavailable, using flat fallback:", e);
+  }
+</script>
+<script>
+  // Highlight the current section in the sidebar TOC as you scroll.
+  const tocLinks = [...document.querySelectorAll("#docsToc a")];
+  const sections = tocLinks.map(a => document.querySelector(a.getAttribute("href"))).filter(Boolean);
+  function updateToc() {
+    let current = sections[0];
+    for (const sec of sections) {
+      if (sec.getBoundingClientRect().top < 140) current = sec;
+    }
+    tocLinks.forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + current.id));
+  }
+  document.addEventListener("scroll", updateToc, { passive: true });
+  updateToc();
+</script>
+</body>
+</html>
