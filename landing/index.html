@@ -65,6 +65,17 @@
     .how-visual { order: -1; }
   }
 
+  /* ---------- roadmap ---------- */
+  .road-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1180px; margin: 0 auto; }
+  .road-card { position: relative; background: var(--panel); border: 1px dashed var(--border); border-radius: var(--radius);
+    padding: 26px 24px; opacity: 0; transform: translateY(24px); }
+  .road-card .feat-ico { background: var(--panel2); color: var(--accent); }
+  .road-card h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 8px; }
+  .road-card p { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .road-badge { position: absolute; top: 20px; right: 22px; font-size: 10px; font-weight: 700; letter-spacing: .5px;
+    text-transform: uppercase; color: var(--muted); background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 100px; padding: 3px 10px; }
+
   /* ---------- download ---------- */
   .dl-section { text-align: center; }
   .dl-cards { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-top: 46px; }
@@ -79,6 +90,7 @@
   @media (max-width: 880px) {
     h1.headline { font-size: 38px; }
     .feat-grid { grid-template-columns: 1fr; }
+    .road-grid { grid-template-columns: 1fr; }
     .glow2 { display: none; }
   }
 </style>
@@ -168,6 +180,24 @@
   </div>
 </section>
 
+<section id="roadmap">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow">Coming soon</div>
+      <h2>What's next.</h2>
+      <p>Still actively building. Here's what's on deck.</p>
+    </div>
+    <div class="road-grid" id="roadGrid">
+      <div class="road-card"><span class="road-badge">Soon</span><div class="feat-ico">➤</div><h3>Cursor packs</h3><p>Pick from a set of vector cursor styles instead of the one default arrow — swap the look without touching your footage.</p></div>
+      <div class="road-card"><span class="road-badge">Soon</span><div class="feat-ico">✎</div><h3>Auto captions</h3><p>Automatic transcription with editable, styled captions burned in or exported as a separate file.</p></div>
+      <div class="road-card"><span class="road-badge">Soon</span><div class="feat-ico">✂</div><h3>Silence &amp; filler-word removal</h3><p>Automatically trim dead air and "um"s from your narration — reviewable before it's applied, not a black box.</p></div>
+      <div class="road-card"><span class="road-badge">Later</span><div class="feat-ico">🪟</div><h3>Windows native capture parity</h3><p>The same OS-level cursor hiding and custom-area recording Mac gets today, brought to Windows.</p></div>
+      <div class="road-card"><span class="road-badge">Later</span><div class="feat-ico">☁</div><h3>Cloud sync</h3><p>Start a recording on one machine, keep editing on another — projects follow you.</p></div>
+      <div class="road-card"><span class="road-badge">Later</span><div class="feat-ico">▤</div><h3>One-click templates</h3><p>Presets for common formats — bug report, quick tutorial, changelog — that set up styling and pacing for you.</p></div>
+    </div>
+  </div>
+</section>
+
 <section id="download" class="dl-section">
   <div class="wrap">
     <div class="section-head">
@@ -250,7 +280,7 @@
   // CSS default (opacity:0 in the stylesheet) gets force-shown here
   // regardless of whether GSAP/ScrollTrigger ever ran.
   function forceReveal() {
-    document.querySelectorAll(".feat-card, .step, .dl-card, .section-head, .cta-row .btn, .cta-note, .kicker, .headline, .sub, #heroMock")
+    document.querySelectorAll(".feat-card, .step, .dl-card, .road-card, .section-head, .cta-row .btn, .cta-note, .kicker, .headline, .sub, #heroMock")
       .forEach(el => { el.style.opacity = 1; el.style.transform = "none"; });
   }
   window.addEventListener("load", () => setTimeout(forceReveal, 2500));
@@ -288,6 +318,11 @@
       ScrollTrigger.batch(".dl-card", {
         start: "top 88%",
         onEnter: batch => gsap.to(batch, { opacity: 1, y: 0, duration: .6, stagger: .15, ease: "power2.out" }),
+        once: true,
+      });
+      ScrollTrigger.batch(".road-card", {
+        start: "top 88%",
+        onEnter: batch => gsap.to(batch, { opacity: 1, y: 0, duration: .6, stagger: .1, ease: "power2.out" }),
         once: true,
       });
 
