@@ -8,6 +8,7 @@
   :root {
     --bg: #0c0c0f; --panel: #17171c; --panel2: #1f1f26; --border: #2a2a33;
     --text: #f2f2f5; --muted: #9a9aa5; --accent: #49d34c; --accent2: #32381f;
+    --accent-light: #5ce65f; --accent-bg: #1a2418;
     --danger: #e74c3c; --radius: 12px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,21 +32,21 @@
     padding: 10px; cursor: pointer; transition: all .15s; min-width: 0; }
   .src-card .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .src-card:hover { border-color: #3d3d4a; }
-  .src-card.on { border-color: var(--accent); background: #1a2418; }
+  .src-card.on { border-color: var(--accent); background: var(--accent-bg); }
   .src-card img { width: 100%; border-radius: 6px; display: block; }
   .src-card .name { font-size: 13px; font-weight: 600; margin-top: 8px; text-align: center; color: var(--muted); }
   .options { display: flex; gap: 12px; }
   .opt { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 14px 20px; width: 140px; cursor: pointer; text-align: center; transition: all .15s; user-select: none; }
   .opt:hover { border-color: #3d3d4a; }
-  .opt.on { border-color: var(--accent); background: #1a2418; }
+  .opt.on { border-color: var(--accent); background: var(--accent-bg); }
   .opt .ico { font-size: 22px; margin-bottom: 6px; }
   .opt .name { font-size: 13px; font-weight: 600; }
   .opt .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .btn { border: none; border-radius: 10px; padding: 13px 30px; font-size: 15px; font-weight: 600;
     cursor: pointer; transition: all .15s; font-family: inherit; }
   .btn-primary { background: var(--accent); color: #0c0c0f; }
-  .btn-primary:hover { background: #5ce65f; }
+  .btn-primary:hover { background: var(--accent-light); }
   .btn-ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
   .btn-ghost:hover { border-color: #3d3d4a; }
   .btn-danger { background: var(--danger); color: white; }
@@ -150,7 +151,21 @@
     background: var(--panel2); color: var(--muted); font-size: 14px; font-weight: 700; cursor: pointer;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
   .help-btn:hover { border-color: var(--accent); color: var(--accent); }
-  #setupTopRow { position: fixed; top: 20px; right: 24px; z-index: 20; }
+  #setupTopRow { position: fixed; top: 20px; right: 24px; z-index: 20; display: flex; align-items: center; gap: 10px; }
+
+  /* ---------- Theme picker ---------- */
+  .theme-btn { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--accent); cursor: pointer; flex-shrink: 0; transition: all .15s; position: relative; }
+  .theme-btn:hover { transform: scale(1.08); }
+  .theme-pop { position: absolute; top: calc(100% + 10px); right: 0; z-index: 40; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: none; gap: 8px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+  .theme-pop.open { display: flex; }
+  .theme-dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+    padding: 0; transition: all .15s; }
+  .theme-dot:hover { transform: scale(1.12); }
+  .theme-dot.on { border-color: var(--text); }
+  .theme-anchor { position: relative; }
 
   .tip-ico { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px;
     border-radius: 50%; background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
@@ -192,7 +207,13 @@
 
 <!-- ============ SETUP ============ -->
 <div id="setup" class="screen active">
-  <div id="setupTopRow"><button class="help-btn" id="btnHelp" title="Help &amp; tutorial">?</button></div>
+  <div id="setupTopRow">
+    <div class="theme-anchor">
+      <button class="theme-btn" id="btnTheme" title="Theme color"></button>
+      <div class="theme-pop" id="themePop"></div>
+    </div>
+    <button class="help-btn" id="btnHelp" title="Help &amp; tutorial">?</button>
+  </div>
   <div class="logo"><div class="logo-mark"><img src="build/Video Icons.png" alt=""></div><h1>Focal</h1></div>
   <p class="tagline">Beautiful screen recordings with automatic zoom.</p>
   <div class="src-grid" id="srcGrid"></div>
@@ -257,6 +278,10 @@
     <div class="topbar">
       <div class="topbar-title"><div class="logo-mark"><img src="build/Video Icons.png" alt=""></div> Focal — Editor</div>
       <div style="display:flex; align-items:center; gap:10px;">
+        <div class="theme-anchor">
+          <button class="theme-btn" id="btnThemeEditor" title="Theme color"></button>
+          <div class="theme-pop" id="themePopEditor"></div>
+        </div>
         <button class="help-btn" id="btnHelpEditor" title="Help &amp; tutorial">?</button>
         <button class="btn btn-ghost" id="btnNew" style="padding:8px 16px;font-size:13px;">← New recording</button>
       </div>
@@ -663,6 +688,11 @@ const SETUP_TOUR_STEPS = [
     text: "After a 3-second countdown, Focal minimizes and starts recording. Your clicks are tracked automatically to drive auto zoom — no manual keyframing needed. Stop anytime with ⌘⇧S (Ctrl+Shift+S).",
   },
   {
+    el: () => $("btnTheme"),
+    title: "Make it yours",
+    text: "Pick an accent color here — it's available from the setup screen and the editor, and your choice is remembered.",
+  },
+  {
     el: () => $("btnHelp"),
     title: "Come back anytime",
     text: "Click here whenever you need the full guide again, or to replay this tour.",
@@ -792,6 +822,63 @@ $("btnHelp").addEventListener("click", openHelp);
 $("btnHelpEditor").addEventListener("click", openHelp);
 $("btnHelpClose").addEventListener("click", closeHelp);
 $("helpModal").addEventListener("click", (e) => { if (e.target.id === "helpModal") closeHelp(); });
+
+// ---------- Theme picker ----------
+const THEMES = {
+  green:  { accent: "#49d34c", accent2: "#32381f", light: "#5ce65f", bg: "#1a2418" },
+  blue:   { accent: "#4facfe", accent2: "#1c3350", light: "#7cc4ff", bg: "#152233" },
+  purple: { accent: "#a78bfa", accent2: "#2e2650", light: "#c4b0ff", bg: "#241f3d" },
+  pink:   { accent: "#f472b6", accent2: "#3d1f30", light: "#ff8fcb", bg: "#301926" },
+  orange: { accent: "#fb923c", accent2: "#3d2810", light: "#ffb066", bg: "#2e1f0c" },
+  teal:   { accent: "#2dd4bf", accent2: "#123330", light: "#5eead4", bg: "#0f2624" },
+};
+const THEME_KEY = "focal_theme_v1";
+
+function applyTheme(name) {
+  const t = THEMES[name] || THEMES.green;
+  const root = document.documentElement.style;
+  root.setProperty("--accent", t.accent);
+  root.setProperty("--accent2", t.accent2);
+  root.setProperty("--accent-light", t.light);
+  root.setProperty("--accent-bg", t.bg);
+  document.querySelectorAll(".theme-btn").forEach(b => b.style.background = t.accent);
+  document.querySelectorAll(".theme-dot").forEach(d => d.classList.toggle("on", d.dataset.theme === name));
+  try { localStorage.setItem(THEME_KEY, name); } catch (e) {}
+}
+
+function buildThemePop(pop) {
+  pop.innerHTML = "";
+  Object.keys(THEMES).forEach(name => {
+    const dot = document.createElement("button");
+    dot.className = "theme-dot";
+    dot.dataset.theme = name;
+    dot.title = name[0].toUpperCase() + name.slice(1);
+    dot.style.background = THEMES[name].accent;
+    dot.addEventListener("click", (e) => {
+      e.stopPropagation();
+      applyTheme(name);
+      document.querySelectorAll(".theme-pop").forEach(p => p.classList.remove("open"));
+    });
+    pop.appendChild(dot);
+  });
+}
+[$("themePop"), $("themePopEditor")].forEach(buildThemePop);
+[["btnTheme", "themePop"], ["btnThemeEditor", "themePopEditor"]].forEach(([btnId, popId]) => {
+  $(btnId).addEventListener("click", (e) => {
+    e.stopPropagation();
+    const pop = $(popId);
+    const wasOpen = pop.classList.contains("open");
+    document.querySelectorAll(".theme-pop").forEach(p => p.classList.remove("open"));
+    if (!wasOpen) pop.classList.add("open");
+  });
+});
+document.addEventListener("click", () => document.querySelectorAll(".theme-pop").forEach(p => p.classList.remove("open")));
+
+(function initTheme() {
+  let saved = "green";
+  try { saved = localStorage.getItem(THEME_KEY) || "green"; } catch (e) {}
+  applyTheme(saved);
+})();
 $("btnTakeTour").addEventListener("click", () => {
   if ($("editor").classList.contains("active")) startTour(EDITOR_TOUR_STEPS, "focal_tour_editor_v1_seen");
   else if ($("setup").classList.contains("active")) startTour(SETUP_TOUR_STEPS, "focal_tour_setup_v1_seen");
@@ -894,11 +981,12 @@ function drawWave() {
     i ? g.lineTo(x, y) : g.moveTo(x, y);
   }
   const rms = Math.sqrt(sum / data.length);
-  g.strokeStyle = rms > 0.02 ? "#49d34c" : "#9a9aa5";
+  const accentColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#49d34c";
+  g.strokeStyle = rms > 0.02 ? accentColor : "#9a9aa5";
   g.lineWidth = 2;
   g.stroke();
   const label = $("micLabel");
-  if (rms > 0.02) { label.textContent = "Microphone working ✓"; label.style.color = "#49d34c"; }
+  if (rms > 0.02) { label.textContent = "Microphone working ✓"; label.style.color = accentColor; }
   micRaf = requestAnimationFrame(drawWave);
 }
 

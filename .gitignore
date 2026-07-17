@@ -4,3 +4,8 @@ screen-studio-app/studio-recording.mp4
 landing/downloads/
 .wrangler/
 .DS_Store
+
+# stray local backups / superseded prototype, not part of the current app
+screen-studio-app.zip
+zipN9hKh
+screen-studio.html

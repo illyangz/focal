@@ -2,7 +2,8 @@
   "name": "focal",
   "version": "1.0.0",
   "description": "Beautiful screen recordings with automatic zoom",
-  "license": "MIT",
+  "license": "UNLICENSED",
+  "author": "Focal",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
