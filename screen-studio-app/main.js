@@ -60,22 +60,83 @@ const AS_FRONT_WINDOW = [
   "-e", "end tell",
 ];
 
+function parseWindowBoundsOutput(stdout) {
+  // Shared by both platform samplers — same "x|y|w|h|title|owner" shape.
+  // Title (and in principle owner name) could themselves contain "|" — the
+  // last field is always the owner, everything between the fixed numeric
+  // fields and that last field is the title, rejoined.
+  const parts = String(stdout).trim().split("|");
+  if (parts.length < 5) return null;
+  const [xs, ys, ws, hs] = parts;
+  const owner = parts[parts.length - 1];
+  const title = parts.slice(4, parts.length - 1).join("|");
+  const x = parseFloat(xs), y = parseFloat(ys), width = parseFloat(ws), height = parseFloat(hs);
+  if (![x, y, width, height].every(Number.isFinite)) return null;
+  return { x, y, width, height, title, owner: owner || "" };
+}
+
 function getFrontWindowBounds() {
   return new Promise((resolve) => {
     execFile("osascript", AS_FRONT_WINDOW, { timeout: 1500 }, (err, stdout) => {
       if (err) return resolve(null);
-      // Title (and in principle owner name) could themselves contain "|" —
-      // the last field is always the owner, everything between the fixed
-      // numeric fields and that last field is the title, rejoined.
-      const parts = String(stdout).trim().split("|");
-      if (parts.length < 5) return resolve(null);
-      const [xs, ys, ws, hs] = parts;
-      const owner = parts[parts.length - 1];
-      const title = parts.slice(4, parts.length - 1).join("|");
-      const x = parseFloat(xs), y = parseFloat(ys), width = parseFloat(ws), height = parseFloat(hs);
-      if (![x, y, width, height].every(Number.isFinite)) return resolve(null);
-      resolve({ x, y, width, height, title, owner: owner || "" });
+      resolve(parseWindowBoundsOutput(stdout));
     });
+  });
+}
+
+// Windows equivalent of the AppleScript sampler above — same purpose (map
+// global cursor coordinates into the recorded window's space for windowed
+// recordings), same "x|y|w|h|title|owner" output shape, so the renderer's
+// existing matching/heuristic-offset logic needs no changes to consume it.
+// Uses DwmGetWindowAttribute's EXTENDED_FRAME_BOUNDS rather than plain
+// GetWindowRect — modern Windows pads GetWindowRect with an invisible resize
+// border that isn't part of what's actually captured, which would otherwise
+// reintroduce the same kind of offset bug the macOS chromeTop saga was about.
+// SetProcessDpiAwarenessContext keeps these pixel coordinates in the same
+// space as Electron's screen.getCursorScreenPoint().
+const PS_FRONT_WINDOW = `
+Add-Type @"
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public class FocalWin32 {
+  public struct RECT { public int Left, Top, Right, Bottom; }
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+}
+"@
+try { [FocalWin32]::SetProcessDpiAwarenessContext([IntPtr]::new(-4)) | Out-Null } catch {}
+$hwnd = [FocalWin32]::GetForegroundWindow()
+if ($hwnd -eq [IntPtr]::Zero) { Write-Output "|||||"; exit }
+$rect = New-Object FocalWin32+RECT
+$hr = [FocalWin32]::DwmGetWindowAttribute($hwnd, 9, [ref]$rect, [System.Runtime.InteropServices.Marshal]::SizeOf([type]"FocalWin32+RECT"))
+if ($hr -ne 0) { [FocalWin32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null }
+$sb = New-Object System.Text.StringBuilder(256)
+[FocalWin32]::GetWindowText($hwnd, $sb, 256) | Out-Null
+[uint32]$procId = 0
+[FocalWin32]::GetWindowThreadProcessId($hwnd, [ref]$procId) | Out-Null
+$owner = ""
+try { $owner = (Get-Process -Id $procId -ErrorAction Stop).ProcessName } catch {}
+$w = $rect.Right - $rect.Left
+$h = $rect.Bottom - $rect.Top
+Write-Output ("{0}|{1}|{2}|{3}|{4}|{5}" -f $rect.Left, $rect.Top, $w, $h, $sb.ToString(), $owner)
+`;
+
+function getFrontWindowBoundsWin() {
+  return new Promise((resolve) => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", PS_FRONT_WINDOW],
+      { timeout: 1500, windowsHide: true },
+      (err, stdout) => {
+        if (err) return resolve(null);
+        resolve(parseWindowBoundsOutput(stdout));
+      }
+    );
   });
 }
 
@@ -269,10 +330,13 @@ ipcMain.handle("track-start", () => {
   }, 16);
 
   // sample the active window's bounds (for window-capture cursor mapping)
-  if (process.platform === "darwin") {
+  const sampleWinBounds = process.platform === "darwin" ? getFrontWindowBounds
+    : process.platform === "win32" ? getFrontWindowBoundsWin
+    : null;
+  if (sampleWinBounds) {
     winTimer = setInterval(async () => {
       if (!tracking) return;
-      const w = await getFrontWindowBounds();
+      const w = await sampleWinBounds();
       if (w) {
         winSamples.push({
           t: Date.now(),
