@@ -365,7 +365,10 @@
           <option value="fade">Fade</option><option value="slide">Slide up</option>
           <option value="scale">Scale</option><option value="none">None</option>
         </select></div>
-      <p class="note">Slides fill the frame with text; annotations are draggable labels; images and video clips overlay the recording (screenshots, B-roll, intros). All added at the playhead.</p>
+      <div class="row" style="margin-top:8px;"><label>Image size</label><input type="range" id="ctlOvSize" min="6" max="70" value="22"></div>
+      <div class="row"><label>Use as watermark</label>
+        <label class="switch"><input type="checkbox" id="ctlOvWatermark"><span class="sl"></span></label></div>
+      <p class="note">Slides fill the frame with text; annotations are draggable labels; video clips overlay the recording (B-roll, intros). Images: drag on the preview to position, resize with the slider above — click a block to select it first. A watermark image stays on screen for the whole video, ignoring its timeline trim. All added at the playhead.</p>
       <input type="file" id="imgFile" accept="image/*" style="display:none">
       <input type="file" id="brollFile" accept="video/*" style="display:none">
     </div>
@@ -579,7 +582,7 @@ const state = {
   camX: null, camY: null, // normalized center when dragged; null = use corner preset
   camId: "", micId: "",   // selected input devices
   cutSegs: [], camSegs: [], // cut sections & full-screen camera sections
-  overlaySegs: [],          // slides / annotations / images / b-roll
+  overlaySegs: [], selOv: null, // slides / annotations / images / b-roll
   maskSegs: [], selMask: null, // pixelation masks (video-fraction coords)
   animStyle: "fade",
   enhanceVoice: true, saveCamClip: false,
@@ -1621,6 +1624,7 @@ async function openEditor() {
   state.cutSegs = [];
   state.camSegs = [];
   state.overlaySegs = [];
+  state.selOv = null;
   state.maskSegs = [];
   state.selMask = null;
   $("camSection").style.display = state.camBlob ? "block" : "none";
@@ -1973,7 +1977,7 @@ function drawCursor(ctx, x, y, size, t) {
   ctx.restore();
 }
 
-let noteHits = [], maskHits = [], lastExport = null;
+let noteHits = [], maskHits = [], imgHits = [], lastExport = null;
 const maskTmp = document.createElement("canvas");
 
 function wrapText(ctx, text, maxW) {
@@ -2005,10 +2009,14 @@ function applyOverlayAnim(ctx, w, W, H) {
 
 function drawOverlays(ctx, W, H, t) {
   for (const seg of state.overlaySegs) {
-    const w = segWeight(seg, t, 0.4);
+    // A watermark ignores its timeline trim entirely — it's meant to be on
+    // screen for the whole video, not a timed moment — so skip both the
+    // start/end gate and the enter/exit animation that only make sense for
+    // a segment with a beginning and end.
+    const w = seg.watermark ? 1 : segWeight(seg, t, 0.4);
     if (w <= 0) continue;
     ctx.save();
-    applyOverlayAnim(ctx, w, W, H);
+    if (!seg.watermark) applyOverlayAnim(ctx, w, W, H);
 
     if (seg.type === "slide") {
       drawBackground(ctx, W, H);
@@ -2025,8 +2033,19 @@ function drawOverlays(ctx, W, H, t) {
       const y0 = H / 2 - ((lines.length - 1) * lh) / 2;
       lines.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * lh));
     } else if (seg.type === "image" && seg.img) {
-      const s = Math.max(W / seg.img.width, H / seg.img.height);
-      ctx.drawImage(seg.img, (W - seg.img.width * s) / 2, (H - seg.img.height * s) / 2, seg.img.width * s, seg.img.height * s);
+      // Positioned/sized like the webcam bubble (drag on the preview to
+      // move, size slider to resize) rather than a full-frame cover — this
+      // is what makes it usable as a corner logo/watermark alongside the
+      // rest of the recording, instead of blocking it out entirely.
+      const box = ((seg.size || 22) / 100) * Math.min(W, H);
+      const iw = seg.img.width, ih = seg.img.height;
+      const fit = box / Math.max(iw, ih);
+      const dw = iw * fit, dh = ih * fit;
+      const dx = seg.x * W - dw / 2, dy = seg.y * H - dh / 2;
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = box * 0.06;
+      ctx.drawImage(seg.img, dx, dy, dw, dh);
+      if (ctx === pctx) imgHits.push({ seg, rx: dx, ry: dy, rw: dw, rh: dh });
     } else if (seg.type === "broll" && seg.el && seg.el.videoWidth) {
       const cw = seg.el.videoWidth, ch = seg.el.videoHeight;
       const s = Math.max(W / cw, H / ch);
@@ -2075,7 +2094,7 @@ function updateBroll(t) {
 }
 
 function drawFrame(ctx, W, H) {
-  if (ctx === pctx) { noteHits.length = 0; maskHits.length = 0; }
+  if (ctx === pctx) { noteHits.length = 0; maskHits.length = 0; imgHits.length = 0; }
   drawBackground(ctx, W, H);
 
   const vw = screenVid.videoWidth, vh = screenVid.videoHeight;
@@ -2403,7 +2422,7 @@ const LANE_TITLES = {
   "cut-block": "Cut (skipped on export) — drag to move · drag edges to resize · double-click to remove",
   "ov-slide": "Text slide — click to edit text · drag to move · edges resize · double-click removes",
   "ov-note": "Annotation — click to edit text · drag to move · edges resize · double-click removes",
-  "ov-image": "Image overlay — drag to move · edges resize · double-click removes",
+  "ov-image": "Image overlay — drag on the preview to reposition, size slider to resize · drag block edges to trim timing · double-click removes",
   "ov-broll": "Video clip overlay — drag to move · edges resize · double-click removes",
   "mask-block": "Mask — click to select · drag to move · edges resize · double-click removes",
 };
@@ -2418,6 +2437,10 @@ async function handleBlockClick(seg) {
   if (seg.type === "slide" || seg.type === "note") {
     const nt = await askText(seg.type === "slide" ? "Edit slide text" : "Edit annotation text", seg.text);
     if (nt !== null && nt.trim()) seg.text = nt.trim();
+  } else if (seg.type === "image" && state.overlaySegs.includes(seg)) {
+    state.selOv = seg;
+    $("ctlOvSize").value = seg.size;
+    $("ctlOvWatermark").checked = !!seg.watermark;
   } else if (seg.w !== undefined && seg.h !== undefined && state.maskSegs.includes(seg)) {
     state.selMask = seg;
     $("ctlMaskW").value = Math.round(seg.w * 100);
@@ -2441,12 +2464,21 @@ function renderLane(arr, clsOrFn) {
     const cls = typeof clsOrFn === "function" ? clsOrFn(seg) : clsOrFn;
     const el = document.createElement("div");
     el.className = "lane-block " + cls;
-    if (seg === state.selZoom || seg === state.selMask) el.classList.add("sel");
-    el.title = LANE_TITLES[cls] || "";
-    el.style.left = `${(seg.start / d) * 100}%`;
-    el.style.width = `${((seg.end - seg.start) / d) * 100}%`;
+    if (seg === state.selZoom || seg === state.selMask || seg === state.selOv) el.classList.add("sel");
+    el.title = seg.watermark
+      ? "Watermark — always on screen, ignores trim · click to select · double-click removes"
+      : (LANE_TITLES[cls] || "");
+    if (seg.watermark) {
+      el.style.left = "0%";
+      el.style.width = "100%";
+      el.style.opacity = "0.55";
+    } else {
+      el.style.left = `${(seg.start / d) * 100}%`;
+      el.style.width = `${((seg.end - seg.start) / d) * 100}%`;
+    }
 
     el.addEventListener("pointermove", (ev) => {
+      if (seg.watermark) { el.style.cursor = "pointer"; return; }
       const w = el.getBoundingClientRect().width;
       const ox = ev.clientX - el.getBoundingClientRect().left;
       el.style.cursor = (ox < EDGE || ox > w - EDGE) ? "ew-resize" : "grab";
@@ -2472,6 +2504,13 @@ function renderLane(arr, clsOrFn) {
     el.addEventListener("pointerdown", (ev) => {
       ev.stopPropagation();
       ev.preventDefault();
+      if (seg.watermark) {
+        // Always spans the whole timeline — nothing to trim or move, just
+        // select/remove.
+        const upW = () => { window.removeEventListener("pointerup", upW); clickOrRemove(); };
+        window.addEventListener("pointerup", upW);
+        return;
+      }
       const tlRect = $("timeline").getBoundingClientRect();
       const blockRect = el.getBoundingClientRect();
       const ox = ev.clientX - blockRect.left;
@@ -2515,9 +2554,10 @@ function renderLane(arr, clsOrFn) {
 }
 
 $("timeline").addEventListener("pointerdown", (e) => {
-  if (state.selZoom || state.selMask) {
+  if (state.selZoom || state.selMask || state.selOv) {
     state.selZoom = null;
     state.selMask = null;
+    state.selOv = null;
     renderZoomBlocks();
   }
   const rect = $("timeline").getBoundingClientRect();
@@ -2590,6 +2630,25 @@ preview.addEventListener("pointerdown", (e) => {
       const q = toC(mv);
       seg.x = clamp(ox + (q.x - p.x) / preview.width, 0.02, 0.98);
       seg.y = clamp(oy + (q.y - p.y) / preview.height, 0.02, 0.98);
+    };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return;
+  }
+
+  const ih = hit(imgHits);
+  if (ih) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    const seg = ih.seg, ox = seg.x, oy = seg.y;
+    state.selOv = seg;
+    $("ctlOvSize").value = seg.size;
+    $("ctlOvWatermark").checked = !!seg.watermark;
+    const move = (mv) => {
+      const q = toC(mv);
+      seg.x = clamp(ox + (q.x - p.x) / preview.width, 0, 1);
+      seg.y = clamp(oy + (q.y - p.y) / preview.height, 0, 1);
     };
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move);
@@ -2800,7 +2859,14 @@ $("imgFile").addEventListener("change", (e) => {
   const img = new Image();
   img.onload = () => {
     const t = screenVid.currentTime;
-    addOverlay({ type: "image", img, start: clamp(t, 0, state.duration), end: clamp(t + 4, 0, state.duration) });
+    const seg = {
+      type: "image", img, x: 0.5, y: 0.5, size: 22, watermark: false,
+      start: clamp(t, 0, state.duration), end: clamp(t + 4, 0, state.duration),
+    };
+    addOverlay(seg);
+    state.selOv = seg;
+    $("ctlOvSize").value = seg.size;
+    $("ctlOvWatermark").checked = false;
   };
   img.src = URL.createObjectURL(f);
   e.target.value = "";
@@ -2835,6 +2901,17 @@ $("ctlMaskW").addEventListener("input", (e) => {
 });
 $("ctlMaskH").addEventListener("input", (e) => {
   if (state.selMask) state.selMask.h = clamp(+e.target.value / 100, 0.02, 1 - state.selMask.y);
+});
+
+/* ---- Image overlay: size + watermark toggle for the selected one ---- */
+$("ctlOvSize").addEventListener("input", (e) => {
+  if (state.selOv) state.selOv.size = +e.target.value;
+});
+$("ctlOvWatermark").addEventListener("change", (e) => {
+  if (state.selOv) {
+    state.selOv.watermark = e.target.checked;
+    renderZoomBlocks();
+  }
 });
 
 /* ---- Audio waveform lane ---- */
