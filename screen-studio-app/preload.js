@@ -20,4 +20,8 @@ contextBridge.exposeInMainWorld("studio", {
   minimize: () => ipcRenderer.send("win-minimize"),
   restore: () => ipcRenderer.send("win-restore"),
   onHotkeyStop: (cb) => ipcRenderer.on("hotkey-stop", cb),
+  getDisplays: () => ipcRenderer.invoke("get-displays"),
+  camPreviewOpen: (displayId) => ipcRenderer.invoke("cam-preview-open", displayId),
+  camPreviewClose: () => ipcRenderer.send("cam-preview-close"),
+  camPreviewFrame: (dataURL) => ipcRenderer.send("cam-preview-frame", dataURL),
 });

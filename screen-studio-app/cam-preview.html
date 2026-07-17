@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { -webkit-app-region: drag; } /* whole bubble is draggable — no title bar to grab */
+  #wrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; border-radius: 50%; filter: drop-shadow(0 8px 20px rgba(0,0,0,.5)); }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv" width="220" height="220"></canvas></div>
+<script>
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  const SIZE = 220;
+  const img = new Image();
+  let pending = false, gotFirstFrame = false;
+
+  // Visible the instant the window opens, before any frame has arrived —
+  // otherwise a fully transparent canvas makes a stalled/failed frame feed
+  // look identical to "nothing happened", which is impossible to tell apart
+  // from the toggle just being off.
+  function drawPlaceholder() {
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(20,20,26,0.92)";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.stroke();
+    ctx.restore();
+  }
+  drawPlaceholder();
+
+  img.onload = () => {
+    pending = false;
+    gotFirstFrame = true;
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2, 0, Math.PI * 2);
+    ctx.clip();
+    const s = Math.max(SIZE / img.width, SIZE / img.height);
+    const dw = img.width * s, dh = img.height * s;
+    ctx.drawImage(img, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
+    ctx.restore();
+  };
+  window.camPreview.onFrame((dataURL) => {
+    if (pending) return; // drop frames if we're still decoding the last one
+    pending = true;
+    img.src = dataURL;
+  });
+
+  // If no frame ever arrives (feed failed to start for some reason), keep
+  // the placeholder instead of silently sitting on a stale first frame.
+  setTimeout(() => { if (!gotFirstFrame) drawPlaceholder(); }, 4000);
+</script>
+</body>
+</html>

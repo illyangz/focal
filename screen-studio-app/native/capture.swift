@@ -368,6 +368,36 @@ func record(_ args: Args) async {
         sigSrc2.resume()
         retainedSources.append(sigSrc2)
 
+        // Cursor-shape tracking: periodically sample the live system cursor
+        // and report changes over stdout (plumbing only for now — the
+        // renderer doesn't draw shape-specific art yet, just records which
+        // shape was active when). Scheduled on the main queue since
+        // NSCursor state belongs to the main thread/window-server
+        // connection; retained the same way as the sources above —
+        // DispatchSource objects are silently deallocated (and stop firing)
+        // without a strong reference held for the life of the recording.
+        var lastCursorShape = ""
+        let cursorTimer = DispatchSource.makeTimerSource(queue: .main)
+        cursorTimer.schedule(deadline: .now(), repeating: .milliseconds(40))
+        cursorTimer.setEventHandler {
+            let cursor = NSCursor.currentSystem ?? NSCursor.arrow
+            let shape: String
+            if cursor === NSCursor.pointingHand { shape = "pointer" }
+            else if cursor === NSCursor.iBeam { shape = "text" }
+            else if cursor === NSCursor.resizeLeftRight { shape = "resize-h" }
+            else if cursor === NSCursor.resizeUpDown { shape = "resize-v" }
+            else if cursor === NSCursor.closedHand || cursor === NSCursor.openHand { shape = "grab" }
+            else if cursor === NSCursor.crosshair { shape = "crosshair" }
+            else if cursor === NSCursor.operationNotAllowed { shape = "not-allowed" }
+            else { shape = "arrow" }
+            if shape != lastCursorShape {
+                lastCursorShape = shape
+                print("CURSORSHAPE \(shape)")
+            }
+        }
+        cursorTimer.resume()
+        retainedSources.append(cursorTimer)
+
         if let d = args.duration {
             DispatchQueue.global().asyncAfter(deadline: .now() + d) { trace("TRACE: duration elapsed"); finish() }
         }

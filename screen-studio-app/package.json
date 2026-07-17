@@ -1,6 +1,6 @@
 {
   "name": "focal",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Beautiful screen recordings with automatic zoom",
   "license": "UNLICENSED",
   "author": "Focal",
@@ -19,6 +19,8 @@
       "renderer.html",
       "overlay.html",
       "overlay-preload.js",
+      "cam-preview.html",
+      "cam-preview-preload.js",
       "package.json",
       "build/icon.png",
       "build/Video Icons.png",

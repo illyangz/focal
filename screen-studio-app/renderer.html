@@ -10,6 +10,9 @@
     --text: #f2f2f5; --muted: #9a9aa5; --accent: #49d34c; --accent2: #32381f;
     --accent-light: #5ce65f; --accent-bg: #1a2418;
     --danger: #e74c3c; --radius: 12px;
+    /* spacing scale — used instead of one-off pixel values so the layout
+       reads as deliberately designed rather than accreted feature-by-feature */
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
@@ -18,8 +21,14 @@
   .screen { display: none; height: 100vh; }
   .screen.active { display: flex; }
 
+  /* Shared "grouped section" look — setup-screen cards and (restyled)
+     editor sidebar sections both build on this so the two screens match. */
+  .panel-card { background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: var(--sp-5); }
+
   /* ---------- Setup ---------- */
-  #setup { flex-direction: column; align-items: center; justify-content: flex-start; gap: 18px; padding: 36px 30px; overflow-y: auto; }
+  #setup { flex-direction: column; align-items: center; justify-content: flex-start; gap: var(--sp-5); padding: var(--sp-6) var(--sp-5); overflow-y: auto; }
+  #setupContent { display: flex; flex-direction: column; align-items: center; gap: var(--sp-5); width: min(1200px, 94vw); }
   .logo { display: flex; align-items: center; gap: 12px; }
   .logo-mark { width: 44px; height: 44px; border-radius: 12px;
     background: #fff;
@@ -27,7 +36,9 @@
   .logo-mark img { width: 26px; height: 26px; display: block; }
   .logo h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
   .tagline { color: var(--muted); font-size: 14px; margin-top: -12px; }
-  .src-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; width: min(1060px, 92vw); }
+  .setup-section { width: 100%; display: flex; flex-direction: column; gap: var(--sp-4); }
+  .setup-section > h2 { font-size: 11.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 240px)); gap: 14px; width: 100%; justify-content: center; }
   .src-card { background: var(--panel); border: 2px solid var(--border); border-radius: var(--radius);
     padding: 10px; cursor: pointer; transition: all .15s; min-width: 0; }
   .src-card .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -43,6 +54,26 @@
   .opt .ico { font-size: 22px; margin-bottom: 6px; }
   .opt .name { font-size: 13px; font-weight: 600; }
   .opt .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  #cropPanel { display: none; flex-direction: column; gap: var(--sp-2); background: var(--panel2);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-4) var(--sp-4); }
+  #cropPanel .row { margin-bottom: 0; }
+  #cropInfo { display: none; align-items: center; gap: var(--sp-3); }
+  #devRow { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+  #devRow select { display: none; max-width: 220px; background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-family: inherit; font-size: 12.5px; }
+  #livePreviews { display: flex; gap: var(--sp-5); align-items: flex-start; flex-wrap: wrap; min-height: 0; }
+  #camPreview { display: none; width: 230px; aspect-ratio: 16/10; object-fit: cover; border-radius: 12px;
+    border: 1px solid var(--border); background: #000; transform: scaleX(-1); }
+  #camPreviewRow { display: none; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+  #camPreviewRow label { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+  #selCamPreviewDisplay { display: none; max-width: 180px; background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-family: inherit; font-size: 12px; }
+  #micWrap { display: none; flex-direction: column; gap: 6px; align-items: center; }
+  #micWave { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+  #micLabel { font-size: 11.5px; color: var(--muted); }
+  .action-row { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap; justify-content: center; }
+
   .btn { border: none; border-radius: 10px; padding: 13px 30px; font-size: 15px; font-weight: 600;
     cursor: pointer; transition: all .15s; font-family: inherit; }
   .btn-primary { background: var(--accent); color: #0c0c0f; }
@@ -53,6 +84,7 @@
   .btn:disabled { opacity: .5; cursor: not-allowed; }
   .hint { color: var(--muted); font-size: 12.5px; max-width: 520px; text-align: center; line-height: 1.5; }
   #err { color: #ff8a80; font-size: 13px; display: none; max-width: 480px; text-align: center; }
+  #btnRestore { display: none; }
 
   /* ---------- Recording ---------- */
   #recording { flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
@@ -108,9 +140,16 @@
   .trim-handle::after { content: ""; width: 4px; height: 20px; border-radius: 2px; background: var(--accent2); }
   #timecode { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 96px; text-align: right; }
 
-  .sidebar { width: 320px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--border);
-    overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 22px; }
+  .sidebar { width: clamp(280px, 22vw, 360px); flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--border);
+    overflow-y: auto; padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
   .sidebar h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; }
+  .sidebar details { border-bottom: 1px solid var(--border); padding-bottom: var(--sp-3); }
+  .sidebar summary { display: flex; align-items: center; gap: 7px; cursor: pointer; list-style: none; user-select: none;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 2px 0 10px; }
+  .sidebar summary::-webkit-details-marker { display: none; }
+  .sidebar summary::after { content: "›"; margin-left: auto; font-size: 16px; line-height: 1; color: var(--muted);
+    transform: rotate(90deg); transition: transform .15s; }
+  .sidebar details[open] summary::after { transform: rotate(270deg); }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .row label { font-size: 13px; }
   .row input[type=range] { width: 140px; accent-color: var(--accent); }
@@ -216,49 +255,68 @@
   </div>
   <div class="logo"><div class="logo-mark"><img src="build/Video Icons.png" alt=""></div><h1>Focal</h1></div>
   <p class="tagline">Beautiful screen recordings with automatic zoom.</p>
-  <div class="src-grid" id="srcGrid"></div>
-  <div id="cropPanel" style="display:none; width:min(1060px, 92vw); background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px;">
-    <div class="row" style="margin-bottom:0;">
-      <label style="display:flex; align-items:center; gap:7px;">Record a custom area
-        <span class="tip-ico" data-tip="Only works for entire-screen recordings, not windows. Pick a screen above first, then turn this on.">i</span>
-      </label>
-      <label class="switch"><input type="checkbox" id="ctlCropOn"><span class="sl"></span></label>
+
+  <div id="setupContent">
+    <div class="setup-section panel-card">
+      <h2>Source</h2>
+      <div class="src-grid" id="srcGrid"></div>
+      <div id="cropPanel">
+        <div class="row" style="margin-bottom:0;">
+          <label style="display:flex; align-items:center; gap:7px;">Record a custom area
+            <span class="tip-ico" data-tip="Only works for entire-screen recordings, not windows. Pick a screen above first, then turn this on.">i</span>
+          </label>
+          <label class="switch"><input type="checkbox" id="ctlCropOn"><span class="sl"></span></label>
+        </div>
+        <div id="cropInfo">
+          <span style="font-size:12.5px; color:var(--muted);">Area: <b id="cropDims" style="color:var(--text);">—</b></span>
+          <button class="btn btn-ghost" id="btnCropReselect" style="padding:6px 12px; font-size:12px;">✂ Reselect</button>
+        </div>
+        <p class="note">Only the selected area is recorded. Must be chosen now — it can't be changed once recording starts.</p>
+      </div>
     </div>
-    <div id="cropInfo" style="display:none; align-items:center; gap:10px; margin-top:10px;">
-      <span style="font-size:12.5px; color:var(--muted);">Area: <b id="cropDims" style="color:var(--text);">—</b></span>
-      <button class="btn btn-ghost" id="btnCropReselect" style="padding:6px 12px; font-size:12px;">✂ Reselect</button>
+
+    <div class="setup-section panel-card">
+      <h2>Webcam &amp; Microphone</h2>
+      <div class="options">
+        <div class="opt" id="optCam"><div class="ico">🤳</div><div class="name">Webcam</div><div class="sub">Overlay bubble</div></div>
+        <div class="opt" id="optMic"><div class="ico">🎙️</div><div class="name">Microphone</div><div class="sub">Voiceover</div></div>
+      </div>
+      <div id="devRow">
+        <select id="selCam"></select>
+        <select id="selMic"></select>
+      </div>
+      <div id="livePreviews">
+        <div style="display:flex; flex-direction:column; gap:var(--sp-2);">
+          <video id="camPreview" autoplay muted playsinline></video>
+          <div id="camPreviewRow">
+            <label>
+              <label class="switch"><input type="checkbox" id="ctlCamPreviewOn"><span class="sl"></span></label>
+              Show on screen while recording
+              <span class="tip-ico" data-tip="A small floating self-view, always on top of everything, so you can see yourself while recording — it isn't part of the recording itself and disappears when you stop. Drag it anywhere; pick which display it shows on if you use more than one.">i</span>
+            </label>
+            <select id="selCamPreviewDisplay"></select>
+          </div>
+        </div>
+        <div id="micWrap">
+          <canvas id="micWave" width="260" height="64"></canvas>
+          <span id="micLabel">Waiting for sound…</span>
+        </div>
+      </div>
     </div>
-    <p class="note" style="margin-top:8px;">Only the selected area is recorded. Must be chosen now — it can't be changed once recording starts.</p>
-  </div>
-  <div class="options">
-    <div class="opt" id="optCam"><div class="ico">🤳</div><div class="name">Webcam</div><div class="sub">Overlay bubble</div></div>
-    <div class="opt" id="optMic"><div class="ico">🎙️</div><div class="name">Microphone</div><div class="sub">Voiceover</div></div>
-  </div>
-  <div id="devRow" style="display:flex; gap:12px;">
-    <select id="selCam" style="display:none; max-width:220px; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; font-family:inherit; font-size:12.5px;"></select>
-    <select id="selMic" style="display:none; max-width:220px; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; font-family:inherit; font-size:12.5px;"></select>
-  </div>
-  <div id="livePreviews" style="display:flex; gap:18px; align-items:center; min-height:0;">
-    <video id="camPreview" autoplay muted playsinline
-      style="display:none; width:230px; aspect-ratio:16/10; object-fit:cover; border-radius:12px; border:1px solid var(--border); background:#000; transform:scaleX(-1);"></video>
-    <div id="micWrap" style="display:none; flex-direction:column; gap:6px; align-items:center;">
-      <canvas id="micWave" width="260" height="64"
-        style="background:var(--panel); border:1px solid var(--border); border-radius:10px;"></canvas>
-      <span id="micLabel" style="font-size:11.5px;color:var(--muted);">Waiting for sound…</span>
+
+    <div class="action-row">
+      <button class="btn btn-primary" id="btnStart">● &nbsp;Start Recording</button>
+      <button class="btn btn-ghost" id="btnImport" style="padding:12px 18px;font-size:13px;">📂 Open a video file…</button>
+      <button class="btn btn-ghost" id="btnRestore" style="padding:12px 18px;font-size:13px;">↩ Restore last recording</button>
+      <input type="file" id="importFile" accept="video/*" style="display:none">
     </div>
+    <p class="hint">
+      Recording starts after a 3-second countdown and this window minimizes.
+      Press <b>⌘⇧S</b> (Ctrl+Shift+S) anywhere to stop, or come back to this window.
+      Clicks are detected for automatic zoom — macOS will ask for Screen Recording and Accessibility permissions on first run.
+    </p>
+    <p id="err"></p>
   </div>
-  <div style="display:flex; gap:12px; align-items:center;">
-    <button class="btn btn-primary" id="btnStart">● &nbsp;Start Recording</button>
-    <button class="btn btn-ghost" id="btnImport" style="padding:12px 18px;font-size:13px;">📂 Open a video file…</button>
-    <button class="btn btn-ghost" id="btnRestore" style="display:none; padding:12px 18px;font-size:13px;">↩ Restore last recording</button>
-    <input type="file" id="importFile" accept="video/*" style="display:none">
-  </div>
-  <p class="hint">
-    Recording starts after a 3-second countdown and this window minimizes.
-    Press <b>⌘⇧S</b> (Ctrl+Shift+S) anywhere to stop, or come back to this window.
-    Clicks are detected for automatic zoom — macOS will ask for Screen Recording and Accessibility permissions on first run.
-  </p>
-  <p id="err"></p>
 </div>
 
 <!-- ============ RECORDING ============ -->
@@ -321,8 +379,8 @@
   </div>
 
   <div class="sidebar">
-    <div>
-      <h3 class="with-tip" id="zoomHeading">Zoom <span class="tip-ico" data-tip="Purple blocks on the timeline mark zoom moments, generated automatically from your clicks. Drag to move, drag edges to resize, double-click to remove.">i</span></h3>
+    <details open>
+      <summary class="with-tip" id="zoomHeading">Zoom <span class="tip-ico" data-tip="Purple blocks on the timeline mark zoom moments, generated automatically from your clicks. Drag to move, drag edges to resize, double-click to remove.">i</span></summary>
       <div class="row">
         <label>Auto zoom</label>
         <label class="switch"><input type="checkbox" id="ctlZoomOn" checked><span class="sl"></span></label>
@@ -339,19 +397,19 @@
       </div>
       <p class="note" id="zoomNote">Purple blocks on the timeline are zoom moments — click a block to select it (the Zoom level slider then edits just that block), double-click to remove.</p>
       <p class="note" id="zoomDiag" style="opacity:.75;"></p>
-    </div>
+    </details>
 
-    <div>
-      <h3>Timeline</h3>
+    <details>
+      <summary>Timeline</summary>
       <div class="mini-btns">
         <button class="btn btn-ghost" id="btnCut">✂ Cut section</button>
         <button class="btn btn-ghost" id="btnCamFull" style="display:none;">🎥 Camera full</button>
       </div>
       <p class="note">Tracks: video (cuts appear on it in red) · audio waveform · zoom · camera · overlays · masks. Drag blocks to move, drag edges to resize, double-click to remove, click to edit/select. Darkened ends = trimmed off.</p>
-    </div>
+    </details>
 
-    <div>
-      <h3>Overlays</h3>
+    <details>
+      <summary>Overlays</summary>
       <div class="mini-btns">
         <button class="btn btn-ghost" id="btnSlide">📄 Text slide</button>
         <button class="btn btn-ghost" id="btnNote">💬 Annotation</button>
@@ -371,18 +429,18 @@
       <p class="note">Slides fill the frame with text; annotations are draggable labels; video clips overlay the recording (B-roll, intros). Images: drag on the preview to position, resize with the slider above — click a block to select it first. A watermark image stays on screen for the whole video, ignoring its timeline trim. All added at the playhead.</p>
       <input type="file" id="imgFile" accept="image/*" style="display:none">
       <input type="file" id="brollFile" accept="video/*" style="display:none">
-    </div>
+    </details>
 
-    <div>
-      <h3 class="with-tip" id="maskingHeading">Masking <span class="tip-ico" data-tip="Use this to blur out sensitive info (passwords, emails, etc). Add a mask, then drag it onto the preview to position it — it follows your zooms automatically.">i</span></h3>
+    <details>
+      <summary class="with-tip" id="maskingHeading">Masking <span class="tip-ico" data-tip="Use this to blur out sensitive info (passwords, emails, etc). Add a mask, then drag it onto the preview to position it — it follows your zooms automatically.">i</span></summary>
       <div class="mini-btns"><button class="btn btn-ghost" id="btnMask">▦ Add mask</button></div>
       <div class="row" style="margin-top:8px;"><label>Width</label><input type="range" id="ctlMaskW" min="5" max="90" value="25"></div>
       <div class="row"><label>Height</label><input type="range" id="ctlMaskH" min="4" max="90" value="12"></div>
       <p class="note">Masks pixelate sensitive areas and track your zooms. Click a gray block to select a mask, then drag the patch on the preview to place it.</p>
-    </div>
+    </details>
 
-    <div>
-      <h3 class="with-tip" id="cursorHeading">Cursor <span class="tip-ico" data-tip="The real cursor is excluded at recording time (window recordings only, when captured natively) and replaced with this vector cursor, redrawn from tracked mouse data — sharp at any zoom level.">i</span></h3>
+    <details open>
+      <summary class="with-tip" id="cursorHeading">Cursor <span class="tip-ico" data-tip="The real cursor is excluded at recording time (window recordings only, when captured natively) and replaced with this vector cursor, redrawn from tracked mouse data — sharp at any zoom level.">i</span></summary>
       <div class="row">
         <label>Enhanced cursor</label>
         <label class="switch"><input type="checkbox" id="ctlCursorOn" checked><span class="sl"></span></label>
@@ -406,35 +464,35 @@
         <label class="switch"><input type="checkbox" id="ctlCursorLoop"><span class="sl"></span></label>
       </div>
       <p class="note">The system cursor baked into the capture is erased each frame (a soft blur at its exact logged position), then re-drawn as vector art — sharp at any size, smoothed, fading when idle, and able to glide home for loopable videos.</p>
-    </div>
+    </details>
 
-    <div>
-      <h3>Canvas</h3>
+    <details open>
+      <summary>Canvas</summary>
       <div class="seg" id="aspectSeg">
         <button data-a="16:9" class="on">16:9</button>
         <button data-a="9:16">9:16</button>
         <button data-a="1:1">1:1</button>
         <button data-a="4:3">4:3</button>
       </div>
-    </div>
+    </details>
 
-    <div>
-      <h3>Background</h3>
+    <details>
+      <summary>Background</summary>
       <div class="bg-grid" id="bgGrid"></div>
       <div class="row" style="margin-top:12px;"><label>Custom color</label><input type="color" id="bgColor" value="#1a1a2e"></div>
       <div class="row"><label>Image</label><input type="file" id="bgImage" accept="image/*" style="width:140px;font-size:11px;color:var(--muted);"></div>
-    </div>
+    </details>
 
-    <div>
-      <h3>Layout</h3>
+    <details>
+      <summary>Layout</summary>
       <div class="row"><label>Padding</label><input type="range" id="ctlPad" min="0" max="22" value="7"></div>
       <div class="row"><label>Corner radius</label><input type="range" id="ctlRadius" min="0" max="48" value="14"></div>
       <div class="row"><label>Shadow</label><input type="range" id="ctlShadow" min="0" max="100" value="55"></div>
       <div class="row"><label>Inset border</label><input type="range" id="ctlInset" min="0" max="20" value="0"></div>
-    </div>
+    </details>
 
-    <div id="camSection" style="display:none;">
-      <h3>Webcam</h3>
+    <details id="camSection" style="display:none;">
+      <summary>Webcam</summary>
       <div class="row"><label>Show webcam</label>
         <label class="switch"><input type="checkbox" id="ctlCamOn" checked><span class="sl"></span></label></div>
       <div class="row"><label>Size</label><input type="range" id="ctlCamSize" min="8" max="45" value="20"></div>
@@ -448,7 +506,7 @@
       <div class="row"><label>Mirror camera</label>
         <label class="switch"><input type="checkbox" id="ctlCamMirror" checked><span class="sl"></span></label></div>
       <p class="note">Or just drag the bubble anywhere on the preview. Mirror shows you the way you see yourself in a mirror (like FaceTime); off = the true camera image.</p>
-    </div>
+    </details>
 
     <div class="export-box">
       <h3>Export</h3>
@@ -567,6 +625,7 @@ const state = {
   // cursor/zoom data
   cursorEvents: [],      // [{t, x, y, c}] normalized 0..1, t in seconds
   cursorTrack: [],       // smoothed movement samples
+  cursorShapeEvents: [], // [{t, shape}] which system cursor was active when — plumbing only for now, drawCursor() doesn't render per-shape art yet
   clicks: [],            // click events only
   clicksAvailable: false,
   zoomSegs: [],          // [{start, end, x, y, z}]
@@ -1046,7 +1105,11 @@ $("optCam").addEventListener("click", async () => {
   state.useCam = !state.useCam;
   $("optCam").classList.toggle("on", state.useCam);
   if (state.useCam) {
-    try { await startCamPreview(); }
+    try {
+      await startCamPreview();
+      $("camPreviewRow").style.display = "flex";
+      populateCamPreviewDisplays();
+    }
     catch (e) {
       showErr("Webcam not available: " + e.message);
       state.useCam = false;
@@ -1055,8 +1118,80 @@ $("optCam").addEventListener("click", async () => {
   } else {
     stopCamPreview();
     $("selCam").style.display = "none";
+    $("camPreviewRow").style.display = "none";
   }
 });
+
+/* ---- Floating camera self-view while recording ---- */
+const CAM_PREVIEW_ON_KEY = "focal_cam_preview_on_v1";
+const CAM_PREVIEW_DISPLAY_KEY = "focal_cam_preview_display_v1";
+// Defaults ON — if you've turned the webcam on at all, you almost certainly
+// want to see yourself while recording (it's a preview only, never part of
+// the actual capture, so there's no reason to make people opt in twice).
+try {
+  const saved = localStorage.getItem(CAM_PREVIEW_ON_KEY);
+  state.camPreviewOn = saved === null ? true : saved === "1";
+} catch (e) { state.camPreviewOn = true; }
+$("ctlCamPreviewOn").checked = state.camPreviewOn;
+$("selCamPreviewDisplay").style.display = state.camPreviewOn ? "block" : "none";
+
+async function populateCamPreviewDisplays() {
+  let displays = [];
+  try { displays = await window.studio.getDisplays(); } catch (e) {}
+  const sel = $("selCamPreviewDisplay");
+  sel.innerHTML = "";
+  displays.forEach((d) => {
+    const o = document.createElement("option");
+    o.value = d.id;
+    o.textContent = d.label + (d.primary ? " (Primary)" : "");
+    sel.appendChild(o);
+  });
+  let saved = null;
+  try { saved = localStorage.getItem(CAM_PREVIEW_DISPLAY_KEY); } catch (e) {}
+  if (saved && displays.some((d) => String(d.id) === saved)) sel.value = saved;
+  state.camPreviewDisplay = sel.value;
+  sel.style.display = displays.length > 1 ? "block" : "none";
+}
+$("ctlCamPreviewOn").addEventListener("change", (e) => {
+  state.camPreviewOn = e.target.checked;
+  $("selCamPreviewDisplay").style.display = state.camPreviewOn ? "block" : "none";
+  try { localStorage.setItem(CAM_PREVIEW_ON_KEY, state.camPreviewOn ? "1" : "0"); } catch (e2) {}
+});
+$("selCamPreviewDisplay").addEventListener("change", (e) => {
+  state.camPreviewDisplay = e.target.value;
+  try { localStorage.setItem(CAM_PREVIEW_DISPLAY_KEY, e.target.value); } catch (e2) {}
+});
+
+let camPreviewFeedVid = null, camPreviewInterval = null;
+async function startCamFloatingPreview() {
+  if (!state.camPreviewOn || !camStream) {
+    console.log(`[focal] cam floating preview skipped — on=${state.camPreviewOn} camStream=${!!camStream}`);
+    return;
+  }
+  try {
+    await window.studio.camPreviewOpen(state.camPreviewDisplay ? +state.camPreviewDisplay : undefined);
+  } catch (e) { console.log("[focal] cam preview open failed:", e.message); return; }
+  camPreviewFeedVid = document.createElement("video");
+  camPreviewFeedVid.muted = true;
+  camPreviewFeedVid.playsInline = true;
+  camPreviewFeedVid.srcObject = camStream;
+  await camPreviewFeedVid.play().catch(() => {});
+  const cv = document.createElement("canvas");
+  cv.width = 320; cv.height = 320;
+  const cx = cv.getContext("2d");
+  camPreviewInterval = setInterval(() => {
+    if (!camPreviewFeedVid || !camPreviewFeedVid.videoWidth) return;
+    const vw = camPreviewFeedVid.videoWidth, vh = camPreviewFeedVid.videoHeight;
+    const s = Math.max(320 / vw, 320 / vh);
+    cx.drawImage(camPreviewFeedVid, (320 - vw * s) / 2, (320 - vh * s) / 2, vw * s, vh * s);
+    try { window.studio.camPreviewFrame(cv.toDataURL("image/jpeg", 0.6)); } catch (e) {}
+  }, 66); // ~15fps — a self-view doesn't need to be smoother than that
+}
+function stopCamFloatingPreview() {
+  if (camPreviewInterval) { clearInterval(camPreviewInterval); camPreviewInterval = null; }
+  if (camPreviewFeedVid) { camPreviewFeedVid.pause(); camPreviewFeedVid.srcObject = null; camPreviewFeedVid = null; }
+  try { window.studio.camPreviewClose(); } catch (e) {}
+}
 
 $("optMic").addEventListener("click", async () => {
   state.useMic = !state.useMic;
@@ -1093,6 +1228,11 @@ function showErr(msg) { const e = $("err"); e.textContent = msg; e.style.display
 function switchScreen(name) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   $(name).classList.add("active");
+  // Belt-and-suspenders: the floating cam bubble should never outlive an
+  // active recording. Every path back to setup (normal stop, a failed
+  // stop, crash recovery) closes it here regardless of whether the
+  // recording-stop cleanup that's supposed to handle it actually ran.
+  if (name === "setup") stopCamFloatingPreview();
 }
 
 /* ================= Recording ================= */
@@ -1342,6 +1482,7 @@ $("btnStart").addEventListener("click", async () => {
   if (micRecorder) micRecorder.start(1000);
 
   window.studio.minimize();
+  startCamFloatingPreview();
 
   timerInterval = setInterval(() => {
     const s = Math.floor((Date.now() - recStartWall) / 1000);
@@ -1363,6 +1504,11 @@ async function stopRecording() {
     console.error("[studio] stopRecording failed:", e);
     try { await window.studio.nativeCaptureStop(); } catch (e2) {}
     try { window.studio.restore(); } catch (e2) {}
+    stopCamFloatingPreview();
+    // Release the camera/mic devices even on a failed stop — otherwise
+    // they stay "in use" at the OS level and the next recording's webcam
+    // preview silently fails to acquire them.
+    [screenStream, camStream, micStream].forEach(s => s && s.getTracks().forEach(t => t.stop()));
     clearInterval(timerInterval);
     switchScreen("setup");
     showErr("Recording failed to stop cleanly: " + e.message + " — please try recording again.");
@@ -1373,6 +1519,7 @@ async function stopRecording() {
 
 async function stopRecordingInner() {
   clearInterval(timerInterval);
+  stopCamFloatingPreview();
 
   const isScreenRec = state.source.kind !== "window" && state.source.bounds;
   const liveVideoTrack = screenStream && screenStream.getVideoTracks()[0];
@@ -1382,6 +1529,12 @@ async function stopRecordingInner() {
   const trackData = await window.studio.trackStop(); // always stop the poller
   const rawEvents = trackData.events || trackData || [];
   const winSamples = trackData.winSamples || [];
+  // Which system cursor shape was active when, if the platform reported any
+  // (native-capture macOS recordings, or Windows) — plumbing only for now,
+  // see shapeAt() / drawCursor().
+  state.cursorShapeEvents = (trackData.shapeEvents || [])
+    .map(s => ({ t: (s.t - recStartWall) / 1000, shape: s.shape }))
+    .filter(s => s.t >= 0);
 
   const stopped = (rec) => new Promise(res => { rec.onstop = res; rec.stop(); });
   if (!usingNativeCapture) await stopped(screenRecorder);
@@ -1565,6 +1718,7 @@ $("btnRestore").addEventListener("click", async () => {
   state.camBlob = data.cam ? new Blob([data.cam], { type: "video/webm" }) : null;
   state.micBlob = data.mic ? new Blob([data.mic], { type: "audio/webm" }) : null;
   state.cursorEvents = meta.cursorEvents || [];
+  state.cursorShapeEvents = []; // not persisted across a crash-recovery restore
   state.clicksAvailable = !!meta.clicksAvailable;
   state.capCursorHidden = !!meta.capCursorHidden;
   state.hasAudio = meta.hasAudio !== false;
@@ -1587,6 +1741,7 @@ $("importFile").addEventListener("change", async (e) => {
   state.hasCam = false;
   state.hasAudio = true; // route whatever audio the file has
   state.cursorEvents = [];
+  state.cursorShapeEvents = [];
   state.clicksAvailable = false;
   state.source = { id: "import", kind: "import", bounds: null };
   e.target.value = "";
@@ -1645,6 +1800,13 @@ async function openEditor() {
     if (m.diffsDebug) {
       diagText += ` · offset spread: n=${m.diffsDebug.n} min=${m.diffsDebug.min} median=${m.diffsDebug.median} max=${m.diffsDebug.max}`;
     }
+  }
+  // Temporary verification line for the cursor-shape tracking pipeline —
+  // no rendering depends on this yet (see shapeAt/drawCursor), it's just
+  // to confirm shape samples were actually captured and look plausible.
+  if (state.cursorShapeEvents.length) {
+    const distinct = [...new Set(state.cursorShapeEvents.map(s => s.shape))];
+    diagText += ` · cursor shapes: ${state.cursorShapeEvents.length} samples, seen [${distinct.join(", ")}]`;
   }
   $("zoomDiag").textContent = diagText;
 
@@ -1715,6 +1877,23 @@ function buildCursorTrack() {
 }
 
 function cursorAt(t) { return trackAt(state.cursorTrack, t); }
+
+// Nearest-sample-by-timestamp lookup for the tracked cursor shape — same
+// idiom used elsewhere for matching click/window-bounds samples to a given
+// moment. Shape is categorical (not something to interpolate between), so
+// this is deliberately simpler than the position track's smoothing/spline
+// pipeline. Falls back to "arrow" when there's no shape data at all (legacy
+// capture path, Windows before a real test pass, or nothing within range).
+function shapeAt(t) {
+  const evs = state.cursorShapeEvents;
+  if (!evs || !evs.length) return "arrow";
+  let best = null;
+  for (const s of evs) {
+    const d = Math.abs(s.t - t);
+    if (!best || d < best.d) best = { s, d };
+  }
+  return (best && best.d <= 0.4) ? best.s.shape : "arrow";
+}
 
 // Catmull-Rom spline interpolation — smooth curves through sample points
 // instead of linear segments. P0,P1,P2,P3 are 4 consecutive samples;
@@ -1932,7 +2111,12 @@ function cursorLocalSpeed(t) {
   return maxV;
 }
 
-function drawCursor(ctx, x, y, size, t) {
+// `shape` is threaded through from shapeAt(t) but not yet used to change
+// what's drawn — this pass only builds the tracking pipeline (see
+// state.cursorShapeEvents / shapeAt). Real per-shape vector art (pointer,
+// text, resize, etc.) is a later, purely-visual change localized to this
+// function once that art exists.
+function drawCursor(ctx, x, y, size, t, shape) {
   // click ripple
   if (state.clickFx) {
     for (const c of state.clicks) {
@@ -2194,7 +2378,7 @@ function drawFrame(ctx, W, H) {
           const size = (state.cursorSize / 1000) * Math.min(W, H) * (0.6 + view.z * 0.4);
           ctx.save();
           ctx.globalAlpha = alpha;
-          drawCursor(ctx, cxs, cys, size, t);
+          drawCursor(ctx, cxs, cys, size, t, shapeAt(t));
           ctx.restore();
         }
       }

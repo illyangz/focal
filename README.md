@@ -71,7 +71,7 @@ compiled from `native/capture.swift`. To rebuild it on macOS:
 
 ```bash
 cd screen-studio-app/native
-swiftc capture.swift -o focal_capture -framework ScreenCaptureKit -framework AVFoundation -framework CoreImage
+swiftc -parse-as-library capture.swift -o focal_capture -framework ScreenCaptureKit -framework AVFoundation -framework CoreImage
 ```
 
 ## Landing site

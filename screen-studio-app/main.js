@@ -95,51 +95,93 @@ function getFrontWindowBounds() {
 // reintroduce the same kind of offset bug the macOS chromeTop saga was about.
 // SetProcessDpiAwarenessContext keeps these pixel coordinates in the same
 // space as Electron's screen.getCursorScreenPoint().
-const PS_FRONT_WINDOW = `
+//
+// Runs as a single persistent process for the whole recording (spawned in
+// track-start, killed in track-stop) rather than a fresh powershell.exe per
+// sample — window bounds alone were fine sampled every 500ms via a fresh
+// spawn, but cursor-shape tracking needs a much tighter interval than a
+// per-tick process spawn could keep up with, so both are now reported by
+// one long-lived loop, mirroring how the macOS native-capture helper streams
+// lines over stdout for the life of the recording instead of being polled.
+// [Console]::SetOut to an autoflushing StreamWriter is required here —
+// PowerShell buffers stdout when it isn't attached to a real console, which
+// would otherwise delay Node from seeing lines until the process exits.
+const PS_STREAM_SAMPLER = `
+$stdout = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput())
+$stdout.AutoFlush = $true
+[Console]::SetOut($stdout)
+
 Add-Type @"
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
 public class FocalWin32 {
   public struct RECT { public int Left, Top, Right, Bottom; }
+  public struct POINT { public int X, Y; }
+  public struct CURSORINFO { public int cbSize; public int flags; public IntPtr hCursor; public POINT ptScreenPos; }
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+  [DllImport("user32.dll")] public static extern bool GetCursorInfo(out CURSORINFO pci);
+  [DllImport("user32.dll")] public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
 }
 "@
 try { [FocalWin32]::SetProcessDpiAwarenessContext([IntPtr]::new(-4)) | Out-Null } catch {}
-$hwnd = [FocalWin32]::GetForegroundWindow()
-if ($hwnd -eq [IntPtr]::Zero) { Write-Output "|||||"; exit }
-$rect = New-Object FocalWin32+RECT
-$hr = [FocalWin32]::DwmGetWindowAttribute($hwnd, 9, [ref]$rect, [System.Runtime.InteropServices.Marshal]::SizeOf([type]"FocalWin32+RECT"))
-if ($hr -ne 0) { [FocalWin32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null }
-$sb = New-Object System.Text.StringBuilder(256)
-[FocalWin32]::GetWindowText($hwnd, $sb, 256) | Out-Null
-[uint32]$procId = 0
-[FocalWin32]::GetWindowThreadProcessId($hwnd, [ref]$procId) | Out-Null
-$owner = ""
-try { $owner = (Get-Process -Id $procId -ErrorAction Stop).ProcessName } catch {}
-$w = $rect.Right - $rect.Left
-$h = $rect.Bottom - $rect.Top
-Write-Output ("{0}|{1}|{2}|{3}|{4}|{5}" -f $rect.Left, $rect.Top, $w, $h, $sb.ToString(), $owner)
-`;
 
-function getFrontWindowBoundsWin() {
-  return new Promise((resolve) => {
-    execFile(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", PS_FRONT_WINDOW],
-      { timeout: 1500, windowsHide: true },
-      (err, stdout) => {
-        if (err) return resolve(null);
-        resolve(parseWindowBoundsOutput(stdout));
-      }
-    );
-  });
+# Standard IDC_* system cursor IDs, mapped to Focal's cross-platform shape
+# vocabulary (same names the macOS sampler reports) — Windows has no exact
+# equivalent of a "closed hand" cursor, IDC_SIZEALL (4-way move) is the
+# closest conceptual match, mapped to "grab".
+$cursorMap = @{}
+$cursorMap[[FocalWin32]::LoadCursor([IntPtr]::Zero, 32649)] = "pointer"    # IDC_HAND
+$cursorMap[[FocalWin32]::LoadCursor([IntPtr]::Zero, 32513)] = "text"      # IDC_IBEAM
+$cursorMap[[FocalWin32]::LoadCursor([IntPtr]::Zero, 32644)] = "resize-h"  # IDC_SIZEWE
+$cursorMap[[FocalWin32]::LoadCursor([IntPtr]::Zero, 32645)] = "resize-v"  # IDC_SIZENS
+$cursorMap[[FocalWin32]::LoadCursor([IntPtr]::Zero, 32646)] = "grab"      # IDC_SIZEALL
+$cursorMap[[FocalWin32]::LoadCursor([IntPtr]::Zero, 32515)] = "crosshair" # IDC_CROSS
+$cursorMap[[FocalWin32]::LoadCursor([IntPtr]::Zero, 32648)] = "not-allowed" # IDC_NO
+
+$lastShape = ""
+$counter = 0
+while ($true) {
+  $ci = New-Object FocalWin32+CURSORINFO
+  $ci.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf([type]"FocalWin32+CURSORINFO")
+  $shape = "arrow"
+  if ([FocalWin32]::GetCursorInfo([ref]$ci)) {
+    if ($cursorMap.ContainsKey($ci.hCursor)) { $shape = $cursorMap[$ci.hCursor] }
+  }
+  if ($shape -ne $lastShape) {
+    $lastShape = $shape
+    Write-Output "CURSORSHAPE $shape"
+  }
+
+  $counter++
+  if ($counter % 12 -eq 0) {
+    $hwnd = [FocalWin32]::GetForegroundWindow()
+    if ($hwnd -eq [IntPtr]::Zero) {
+      Write-Output "WINBOUNDS |||||"
+    } else {
+      $rect = New-Object FocalWin32+RECT
+      $hr = [FocalWin32]::DwmGetWindowAttribute($hwnd, 9, [ref]$rect, [System.Runtime.InteropServices.Marshal]::SizeOf([type]"FocalWin32+RECT"))
+      if ($hr -ne 0) { [FocalWin32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null }
+      $sb = New-Object System.Text.StringBuilder(256)
+      [FocalWin32]::GetWindowText($hwnd, $sb, 256) | Out-Null
+      [uint32]$procId = 0
+      [FocalWin32]::GetWindowThreadProcessId($hwnd, [ref]$procId) | Out-Null
+      $owner = ""
+      try { $owner = (Get-Process -Id $procId -ErrorAction Stop).ProcessName } catch {}
+      $w = $rect.Right - $rect.Left
+      $h = $rect.Bottom - $rect.Top
+      Write-Output ("WINBOUNDS {0}|{1}|{2}|{3}|{4}|{5}" -f $rect.Left, $rect.Top, $w, $h, $sb.ToString(), $owner)
+    }
+  }
+
+  Start-Sleep -Milliseconds 40
 }
+`;
 
 let win = null;
 
@@ -261,6 +303,7 @@ app.on("will-quit", () => {
   if (uIOhook && hookStarted) {
     try { uIOhook.stop(); } catch {}
   }
+  if (camPreviewWin && !camPreviewWin.isDestroyed()) camPreviewWin.close();
 });
 
 /* ---------- Permissions ---------- */
@@ -372,10 +415,17 @@ ipcMain.handle("win-tracking", () => process.platform === "darwin");
 
 let winSamples = [];
 let winTimer = null;
+// Cursor-shape samples ({t, shape}), populated on macOS from the native
+// capture helper's stdout (see native-capture-start below) and on Windows
+// from winSamplerProc — plumbing only for now, the renderer doesn't draw
+// shape-specific art yet, just records which shape was active when.
+let shapeEvents = [];
+let winSamplerProc = null; // Windows: persistent PowerShell sampler (window bounds + cursor shape)
 
 ipcMain.handle("track-start", () => {
   events = [];
   winSamples = [];
+  shapeEvents = [];
   tracking = true;
   lastPos = screen.getCursorScreenPoint();
   pollTimer = setInterval(() => {
@@ -385,14 +435,11 @@ ipcMain.handle("track-start", () => {
     events.push({ t: Date.now(), x: p.x, y: p.y, c: 0 });
   }, 16);
 
-  // sample the active window's bounds (for window-capture cursor mapping)
-  const sampleWinBounds = process.platform === "darwin" ? getFrontWindowBounds
-    : process.platform === "win32" ? getFrontWindowBoundsWin
-    : null;
-  if (sampleWinBounds) {
+  if (process.platform === "darwin") {
+    // sample the active window's bounds (for window-capture cursor mapping)
     winTimer = setInterval(async () => {
       if (!tracking) return;
-      const w = await sampleWinBounds();
+      const w = await getFrontWindowBounds();
       if (w) {
         winSamples.push({
           t: Date.now(),
@@ -403,6 +450,33 @@ ipcMain.handle("track-start", () => {
         });
       }
     }, 500);
+  } else if (process.platform === "win32") {
+    winSamplerProc = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS_STREAM_SAMPLER], { windowsHide: true });
+    let buf = "";
+    winSamplerProc.stdout.on("data", (d) => {
+      buf += d.toString();
+      const lines = buf.split("\n");
+      buf = lines.pop(); // keep a trailing partial line for the next chunk
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        if (line.startsWith("WINBOUNDS ")) {
+          const w = parseWindowBoundsOutput(line.slice("WINBOUNDS ".length));
+          if (w) {
+            winSamples.push({
+              t: Date.now(),
+              title: w.title,
+              owner: w.owner,
+              x: w.x, y: w.y,
+              width: w.width, height: w.height,
+            });
+          }
+        } else if (line.startsWith("CURSORSHAPE ")) {
+          shapeEvents.push({ t: Date.now(), shape: line.slice("CURSORSHAPE ".length).trim() });
+        }
+      }
+    });
+    winSamplerProc.on("error", (e) => console.log("[focal] windows sampler failed to start:", e.message));
   }
 
   let clicksAvailable = false;
@@ -427,7 +501,11 @@ ipcMain.handle("track-stop", () => {
   clearInterval(winTimer);
   pollTimer = null;
   winTimer = null;
-  return { events, winSamples };
+  if (winSamplerProc) {
+    try { winSamplerProc.kill(); } catch {}
+    winSamplerProc = null;
+  }
+  return { events, winSamples, shapeEvents };
 });
 
 /* ---------- Native capture (ScreenCaptureKit helper) ----------
@@ -490,6 +568,11 @@ ipcMain.handle("native-capture-start", (e, opts) => {
           const parts = line.trim().split(/\s+/);
           const [x, y, width, height] = parts.slice(1).map(Number);
           if ([x, y, width, height].every(Number.isFinite)) frame = { x, y, width, height };
+        } else if (line.startsWith("CURSORSHAPE ")) {
+          // Streamed for the whole recording, not just at start — collected
+          // into the same shapeEvents buffer track-stop returns, alongside
+          // the Windows sampler's CURSORSHAPE lines (see track-start above).
+          shapeEvents.push({ t: Date.now(), shape: line.slice("CURSORSHAPE ".length).trim() });
         } else if (line.startsWith("RECORDING") && !settled) {
           settled = true;
           captureProc = proc;
@@ -618,4 +701,74 @@ ipcMain.on("win-restore", () => {
   win.restore();
   win.show();
   win.focus();
+});
+
+/* ---------- Floating webcam self-view (while recording) ----------
+ * A small always-on-top, click-through-free bubble so users can see
+ * themselves while recording — the main window is minimized during
+ * recording and the webcam otherwise stays invisible until editing.
+ * Not part of the capture itself: the renderer relays JPEG frames from the
+ * same MediaStream it's already recording, over IPC, at a modest interval —
+ * simplest way to show a live feed in a second, separate renderer process
+ * without opening a second concurrent handle on the camera device.
+ */
+ipcMain.handle("get-displays", () => {
+  const primaryId = screen.getPrimaryDisplay().id;
+  return screen.getAllDisplays().map((d, i) => ({
+    id: d.id,
+    bounds: d.bounds,
+    primary: d.id === primaryId,
+    label: (d.label && d.label.trim()) || `Display ${i + 1}`,
+  }));
+});
+
+let camPreviewWin = null;
+let camPreviewFrameCount = 0;
+const CAM_PREVIEW_SIZE = 220;
+
+ipcMain.handle("cam-preview-open", (e, displayId) => {
+  camPreviewFrameCount = 0;
+  if (camPreviewWin && !camPreviewWin.isDestroyed()) return true;
+  const displays = screen.getAllDisplays();
+  const target = displays.find((d) => d.id === displayId) || screen.getPrimaryDisplay();
+  const margin = 28;
+  const x = Math.round(target.bounds.x + target.bounds.width - CAM_PREVIEW_SIZE - margin);
+  const y = Math.round(target.bounds.y + target.bounds.height - CAM_PREVIEW_SIZE - margin);
+  console.log(`[focal] cam preview opening at ${x},${y} on display ${target.id} (bounds ${JSON.stringify(target.bounds)})`);
+  camPreviewWin = new BrowserWindow({
+    x, y, width: CAM_PREVIEW_SIZE, height: CAM_PREVIEW_SIZE,
+    frame: false, transparent: true, hasShadow: false, resizable: false,
+    movable: true, skipTaskbar: true, alwaysOnTop: true, fullscreenable: false,
+    focusable: false, backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "cam-preview-preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  camPreviewWin.setAlwaysOnTop(true, "screen-saver");
+  try { camPreviewWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch {}
+  camPreviewWin.loadFile("cam-preview.html");
+  camPreviewWin.once("ready-to-show", () => camPreviewWin && camPreviewWin.show());
+  camPreviewWin.webContents.on("did-fail-load", (ev, code, desc) => {
+    console.log(`[focal] cam preview failed to load: ${code} ${desc}`);
+  });
+  camPreviewWin.on("closed", () => {
+    console.log(`[focal] cam preview closed after ${camPreviewFrameCount} frames`);
+    camPreviewWin = null;
+  });
+  return true;
+});
+
+ipcMain.on("cam-preview-close", () => {
+  if (camPreviewWin && !camPreviewWin.isDestroyed()) camPreviewWin.close();
+  camPreviewWin = null;
+});
+
+ipcMain.on("cam-preview-frame", (e, dataURL) => {
+  camPreviewFrameCount++;
+  if (camPreviewFrameCount === 1) console.log("[focal] cam preview: first frame relayed");
+  if (camPreviewWin && !camPreviewWin.isDestroyed()) {
+    camPreviewWin.webContents.send("cam-preview-frame", dataURL);
+  }
 });

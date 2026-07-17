@@ -55,7 +55,7 @@ To rebuild the helper after editing `capture.swift`:
 
 ```bash
 cd native
-swiftc capture.swift -o focal_capture -framework ScreenCaptureKit -framework AVFoundation -framework CoreImage
+swiftc -parse-as-library capture.swift -o focal_capture -framework ScreenCaptureKit -framework AVFoundation -framework CoreImage
 ```
 
 ## Notes
