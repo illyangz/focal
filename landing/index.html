@@ -18,13 +18,24 @@
   html { scroll-behavior: smooth; }
   body {
     font-family: 'JetBrains Mono', monospace;
-    background: var(--bg); color: var(--text);
+    color: var(--text);
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
   }
   a { color: inherit; }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
   img, svg { display: block; max-width: 100%; }
+
+  /* Animated shader background, fixed behind all content. Solid --bg color
+     doubles as the fallback if the shader script fails to load (no
+     internet, CDN down, etc.) — decorative only, nothing depends on it. */
+  #shaderBg { position: fixed; inset: 0; z-index: -2; background: var(--bg); }
+  /* Softens the shader pattern so body text stays readable over it —
+     backdrop-filter blurs whatever's behind this layer (the shader),
+     while normal content painted above it (z-index: auto/0+) stays sharp. */
+  #shaderBlur { position: fixed; inset: 0; z-index: -1;
+    backdrop-filter: blur(64px); -webkit-backdrop-filter: blur(64px);
+    background: rgba(10,10,13,.4); }
 
   /* ---------- nav ---------- */
   nav { position: fixed; top: 0; left: 0; right: 0; z-index: 50;
@@ -44,6 +55,35 @@
   .btn-ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
   .btn-ghost:hover { border-color: #3d3d4a; }
   .btn-sm { padding: 9px 16px; font-size: 12.5px; }
+
+  /* ---------- cosmic button (ported from cult-ui's CosmicButton — pure CSS,
+     no React needed for the effect itself; recolored to Focal's green) ---------- */
+  @keyframes cosmic-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes cosmic-spin-slow { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+  .cosmic-btn { position: relative; display: inline-flex; align-items: center; justify-content: center;
+    gap: 10px; min-height: 44px; border-radius: 15px; padding: 3px; text-decoration: none;
+    cursor: pointer; border: none; background: none; font: inherit; }
+  .cosmic-btn:active .cosmic-inner { transform: scale(.98); }
+  .cosmic-btn .cosmic-border, .cosmic-btn .cosmic-noise { position: absolute; inset: 0; overflow: hidden;
+    border-radius: 15px; transition: inset .3s ease-out; pointer-events: none; }
+  .cosmic-btn:hover .cosmic-border, .cosmic-btn:hover .cosmic-noise { inset: -3px; }
+  .cosmic-btn .cosmic-border::before { content: ""; position: absolute; inset: -200%;
+    animation: cosmic-spin 3s linear infinite;
+    background: conic-gradient(from 0deg, #49d34c, #8be88d, #d7ffd8, #2fae54, #1f7a38, #3fc44a, #49d34c);
+    opacity: .95; }
+  .cosmic-btn .cosmic-noise { opacity: .55; mix-blend-mode: overlay; }
+  .cosmic-btn .cosmic-noise::before { content: ""; position: absolute; inset: -200%;
+    animation: cosmic-spin-slow 5s linear infinite;
+    background: conic-gradient(from 180deg, #d7ffd8 0%, transparent 30%, #49d34c 50%, transparent 70%, #2c8f3f 100%); }
+  .cosmic-btn .cosmic-inner { position: relative; z-index: 10; display: flex; align-items: center; gap: 9px;
+    height: 100%; width: 100%; border-radius: 12px; background: #16161c; padding: 11px 22px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -1px 0 rgba(0,0,0,.5),
+      0 1px 1px rgba(0,0,0,.45), 0 10px 28px rgba(0,0,0,.35);
+    transition: box-shadow .3s, transform .15s; font-weight: 700; font-size: 13.5px;
+    color: var(--text); white-space: nowrap; }
+  .cosmic-btn:hover .cosmic-inner { box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 0 rgba(0,0,0,.6),
+    0 2px 6px rgba(0,0,0,.55), 0 14px 34px rgba(0,0,0,.42); }
+  .cosmic-btn .plat-svg { width: 17px; height: 17px; flex-shrink: 0; }
 
   /* ---------- hero ---------- */
   header.hero { padding: 200px 28px 120px; position: relative; overflow: hidden; }
@@ -103,10 +143,10 @@
   .dl-cards { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-top: 46px; }
   .dl-card { width: 280px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 30px 26px; text-align: left; opacity: 0; transform: translateY(24px); }
-  .dl-card .plat-ico { font-size: 30px; margin-bottom: 16px; }
+  .dl-card .plat-ico { color: var(--accent); margin-bottom: 16px; }
   .dl-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
   .dl-card .req { font-size: 11.5px; color: var(--muted); margin-bottom: 20px; }
-  .dl-card .btn { width: 100%; }
+  .dl-card .cosmic-btn { width: 100%; }
   .dl-foot { margin-top: 28px; font-size: 12px; color: var(--muted); max-width: 560px; margin-left: auto; margin-right: auto; line-height: 1.6; }
 
   /* ---------- footer ---------- */
@@ -128,6 +168,9 @@
 </head>
 <body>
 
+<div id="shaderBg"></div>
+<div id="shaderBlur"></div>
+
 <nav>
   <div class="inner">
     <div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2"><rect x="4" y="7" width="12" height="10" rx="2"/><path d="M16 10l4-2.4v8.8l-4-2.4z" fill="#000" stroke="none"/></svg></div>Focal</div>
@@ -136,7 +179,10 @@
       <a href="#how">How it works</a>
       <a href="#download">Download</a>
     </div>
-    <a href="#download" class="btn btn-primary btn-sm">Download</a>
+    <a href="#download" class="cosmic-btn">
+      <span class="cosmic-border"></span><span class="cosmic-noise"></span>
+      <span class="cosmic-inner" style="padding:8px 18px; font-size:12.5px;">Download</span>
+    </a>
   </div>
 </nav>
 
@@ -206,16 +252,32 @@
     </div>
     <div class="dl-cards" id="dlCards">
       <div class="dl-card">
-        <div class="plat-ico">🍎</div>
+        <div class="plat-ico">
+          <svg viewBox="0 0 24 24" fill="currentColor" style="width:28px;height:28px;">
+            <path d="M17.05 12.5c-.03-2.73 2.23-4.04 2.33-4.1-1.27-1.86-3.25-2.11-3.95-2.14-1.68-.17-3.28.99-4.13.99-.85 0-2.17-.96-3.56-.94-1.83.03-3.52 1.06-4.46 2.7-1.9 3.3-.49 8.19 1.37 10.87.91 1.31 1.99 2.78 3.41 2.73 1.37-.06 1.89-.89 3.55-.89 1.66 0 2.12.89 3.57.86 1.48-.03 2.41-1.34 3.31-2.65a11.84 11.84 0 0 0 1.5-3.08c-.04-.02-2.88-1.11-2.91-4.35z"/>
+            <path d="M14.6 4.24c.76-.92 1.27-2.19 1.13-3.46-1.09.04-2.41.73-3.19 1.64-.7.81-1.32 2.11-1.15 3.35 1.21.09 2.45-.61 3.21-1.53z"/>
+          </svg>
+        </div>
         <h3>Focal for Mac</h3>
         <div class="req">macOS 13 Ventura or later · Apple Silicon</div>
-        <a href="downloads/Focal-Mac.dmg" class="btn btn-primary">Download .dmg</a>
+        <a href="downloads/Focal-Mac.dmg" class="cosmic-btn">
+          <span class="cosmic-border"></span><span class="cosmic-noise"></span>
+          <span class="cosmic-inner" style="width:100%; justify-content:center;">Download .dmg</span>
+        </a>
       </div>
       <div class="dl-card">
-        <div class="plat-ico">🪟</div>
+        <div class="plat-ico">
+          <svg viewBox="0 0 24 24" fill="currentColor" style="width:26px;height:26px;">
+            <rect x="2" y="2" width="9" height="9"/><rect x="13" y="2" width="9" height="9"/>
+            <rect x="2" y="13" width="9" height="9"/><rect x="13" y="13" width="9" height="9"/>
+          </svg>
+        </div>
         <h3>Focal for Windows</h3>
         <div class="req">Windows 10 or later · 64-bit</div>
-        <a href="downloads/Focal-Windows-Setup.exe" class="btn btn-primary">Download .exe</a>
+        <a href="downloads/Focal-Windows-Setup.exe" class="cosmic-btn">
+          <span class="cosmic-border"></span><span class="cosmic-noise"></span>
+          <span class="cosmic-inner" style="width:100%; justify-content:center;">Download .exe</span>
+        </a>
       </div>
     </div>
     <p class="dl-foot">Focal isn't code-signed by an registered developer yet, so both operating systems will warn you on first launch. On Mac: right-click the app → Open. On Windows: click "More info" → "Run anyway" in the SmartScreen prompt.</p>
@@ -229,6 +291,30 @@
   </div>
 </footer>
 
+<script type="module">
+  // Animated shader background — purely decorative, so any failure here
+  // (offline, CDN down, browser without ESM/WebGL support) just leaves the
+  // plain --bg color from the CSS fallback in place.
+  try {
+    const React = await import("https://esm.sh/react@18");
+    const { createRoot } = await import("https://esm.sh/react-dom@18/client");
+    const { Dithering } = await import("https://esm.sh/@paper-design/shaders-react@latest?deps=react@18,react-dom@18");
+    const mount = document.getElementById("shaderBg");
+    createRoot(mount).render(
+      React.createElement(Dithering, {
+        style: { width: "100%", height: "100%" },
+        colorBack: "#0a0a0d",
+        colorFront: "#49d34c",
+        shape: "simplex",
+        type: "2x2",
+        size: 2.5,
+        speed: 0.38,
+      })
+    );
+  } catch (e) {
+    console.warn("[focal-landing] shader background unavailable, using flat fallback:", e);
+  }
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 <script>
