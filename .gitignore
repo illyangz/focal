@@ -2,4 +2,5 @@ screen-studio-app/node_modules/
 screen-studio-app/dist/
 screen-studio-app/studio-recording.mp4
 landing/downloads/
+.wrangler/
 .DS_Store

@@ -49,13 +49,21 @@
   .feat-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
 
   /* ---------- how it works ---------- */
-  .steps { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 0; }
+  .how-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; max-width: 1100px; margin: 0 auto; }
+  .steps { display: flex; flex-direction: column; gap: 0; }
   .step { display: flex; gap: 28px; padding: 34px 0; border-bottom: 1px solid var(--border); opacity: 0; transform: translateX(-24px); }
   .step:last-child { border-bottom: none; }
   .step-num { flex-shrink: 0; width: 46px; height: 46px; border-radius: 50%; background: var(--panel2); border: 1px solid var(--border);
     display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--accent); font-size: 15px; }
   .step-body h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
   .step-body p { font-size: 13.5px; color: var(--muted); line-height: 1.65; max-width: 560px; }
+  .how-visual .mock { box-shadow: 0 30px 70px rgba(0,0,0,.5); }
+  .how-visual img { width: 100%; display: block; }
+
+  @media (max-width: 980px) {
+    .how-grid { grid-template-columns: 1fr; }
+    .how-visual { order: -1; }
+  }
 
   /* ---------- download ---------- */
   .dl-section { text-align: center; }
@@ -103,8 +111,8 @@
     <h1 class="headline">Screen recordings that <span class="accent-word">zoom themselves.</span></h1>
     <p class="sub">Focal records your screen and automatically zooms in on your clicks — no manual keyframing, no editing skills required. Just record, and it looks produced.</p>
     <div class="cta-row">
-      <a href="downloads/Focal-Mac.dmg" class="btn btn-primary" id="dlMac">⌘ Download for Mac</a>
-      <a href="downloads/Focal-Windows-Setup.exe" class="btn btn-ghost" id="dlWin">⊞ Download for Windows</a>
+      <a href="https://pub-7edefd65576445868402946157f473b1.r2.dev/Focal-Mac.dmg" class="btn btn-primary" id="dlMac">⌘ Download for Mac</a>
+      <a href="https://pub-7edefd65576445868402946157f473b1.r2.dev/Focal-Windows-Setup.exe" class="btn btn-ghost" id="dlWin">⊞ Download for Windows</a>
     </div>
     <div class="cta-note">macOS 13+ (Apple Silicon) · Windows 10+ (64-bit) · Free, no account needed</div>
   </div>
@@ -144,10 +152,18 @@
       <h2>Record. It edits itself. Share.</h2>
       <p>Three steps, no timeline scrubbing required to get something worth sending.</p>
     </div>
-    <div class="steps" id="stepsList">
-      <div class="step"><div class="step-num">1</div><div class="step-body"><h3>Pick a screen, window, or custom area</h3><p>Choose exactly what to record — an entire display, a single window, or a cropped region you drag out yourself.</p></div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-body"><h3>Record like normal</h3><p>Focal minimizes out of the way. Talk, click, work — every click is quietly logged to drive the zoom later.</p></div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-body"><h3>Open the editor — it's already mostly done</h3><p>Zoom moments are generated automatically. Trim, add a few annotations if you want, then export or copy a shareable link.</p></div></div>
+    <div class="how-grid">
+      <div class="steps" id="stepsList">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><h3>Pick a screen, window, or custom area</h3><p>Choose exactly what to record — an entire display, a single window, or a cropped region you drag out yourself.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><h3>Record like normal</h3><p>Focal minimizes out of the way. Talk, click, work — every click is quietly logged to drive the zoom later.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><h3>Open the editor — it's already mostly done</h3><p>Zoom moments are generated automatically. Trim, add a few annotations if you want, then export or copy a shareable link.</p></div></div>
+      </div>
+      <div class="how-visual">
+        <div class="mock">
+          <div class="mock-bar"><span style="background:#e05a4f"></span><span style="background:#e0b23f"></span><span style="background:#3fb95a"></span></div>
+          <img src="assets/focal-editor.png" alt="Focal's editor, showing the timeline with automatically-generated zoom blocks and the styling sidebar" loading="lazy">
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -169,7 +185,7 @@
         </div>
         <h3>Focal for Mac</h3>
         <div class="req">macOS 13 Ventura · Apple Silicon</div>
-        <a href="downloads/Focal-Mac.dmg" class="cosmic-btn">
+        <a href="https://pub-7edefd65576445868402946157f473b1.r2.dev/Focal-Mac.dmg" class="cosmic-btn">
           <span class="cosmic-border"></span><span class="cosmic-noise"></span>
           <span class="cosmic-inner" style="width:100%; justify-content:center;">Download .dmg</span>
         </a>
@@ -183,7 +199,7 @@
         </div>
         <h3>Focal for Windows</h3>
         <div class="req">Windows 10 or later · 64-bit</div>
-        <a href="downloads/Focal-Windows-Setup.exe" class="cosmic-btn">
+        <a href="https://pub-7edefd65576445868402946157f473b1.r2.dev/Focal-Windows-Setup.exe" class="cosmic-btn">
           <span class="cosmic-border"></span><span class="cosmic-noise"></span>
           <span class="cosmic-inner" style="width:100%; justify-content:center;">Download .exe</span>
         </a>
