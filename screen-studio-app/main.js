@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen, globalShortcut, systemPreferences, shell, session } = require("electron");
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, globalShortcut, systemPreferences, shell, session, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { execFile, spawn } = require("child_process");
+const { autoUpdater } = require("electron-updater");
 
 // Sets the name shown in the Dock, Cmd+Tab switcher, and menu bar — must be
 // called before the app is ready. electron-builder uses `productName` for the
@@ -171,6 +172,59 @@ function createWindow() {
 let selectedSourceId = null;
 ipcMain.on("select-source", (e, id) => { selectedSourceId = id; });
 
+/* ---------- Auto-update ----------
+ * Feed is hosted on the same R2 bucket the installers already live in
+ * (electron-builder's "generic" provider — see package.json's build.publish).
+ * Windows gets the full silent download + "restart to install" flow, since
+ * that works fine even unsigned. macOS is intentionally lighter: Squirrel.Mac
+ * (what electron-updater uses under the hood to apply mac updates) validates
+ * that the old and new app's code signatures match before it'll self-replace
+ * the bundle — Focal isn't signed yet, so attempting that would just fail.
+ * Checking for an update and pointing the user at a manual download instead
+ * needs no signature validation at all, so it stays reliable either way.
+ */
+autoUpdater.autoDownload = process.platform === "win32";
+autoUpdater.autoInstallOnAppQuit = process.platform === "win32";
+
+autoUpdater.on("update-available", (info) => {
+  if (process.platform !== "darwin") return; // Windows: autoDownload handles it silently
+  dialog.showMessageBox(win || undefined, {
+    type: "info",
+    title: "Update available",
+    message: `Focal ${info.version} is available — you have ${app.getVersion()}.`,
+    detail: "Focal isn't code-signed yet, so updates on macOS need a quick manual download.",
+    buttons: ["Download", "Later"],
+    defaultId: 0,
+    cancelId: 1,
+  }).then(({ response }) => {
+    if (response === 0) shell.openExternal("https://focal-app.pages.dev");
+  }).catch(() => {});
+});
+
+autoUpdater.on("update-downloaded", () => {
+  if (process.platform !== "win32") return; // mac never auto-downloads, see above
+  dialog.showMessageBox(win || undefined, {
+    type: "info",
+    title: "Update ready",
+    message: "A new version of Focal has been downloaded.",
+    detail: "Restart now to install it?",
+    buttons: ["Restart now", "Later"],
+    defaultId: 0,
+    cancelId: 1,
+  }).then(({ response }) => {
+    if (response === 0) autoUpdater.quitAndInstall();
+  }).catch(() => {});
+});
+
+autoUpdater.on("error", (err) => {
+  console.log("[focal] auto-update check failed:", err.message);
+});
+
+function checkForUpdatesQuietly() {
+  if (!app.isPackaged) return; // no publish feed to hit when running via `npm start`
+  autoUpdater.checkForUpdates().catch(() => {});
+}
+
 app.whenReady().then(() => {
   if (process.platform === "darwin") {
     try { app.dock.setIcon(path.join(__dirname, "build", "icon.png")); } catch {}
@@ -197,6 +251,8 @@ app.whenReady().then(() => {
       win.webContents.send("hotkey-stop");
     }
   });
+  checkForUpdatesQuietly();
+  setInterval(checkForUpdatesQuietly, 4 * 60 * 60 * 1000); // re-check every 4h for long-lived sessions
 });
 
 app.on("window-all-closed", () => app.quit());

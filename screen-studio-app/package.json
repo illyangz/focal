@@ -1,6 +1,6 @@
 {
   "name": "focal",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Beautiful screen recordings with automatic zoom",
   "license": "UNLICENSED",
   "author": "Focal",
@@ -27,6 +27,13 @@
     "asarUnpack": [
       "native/focal_capture"
     ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://pub-7edefd65576445868402946157f473b1.r2.dev",
+        "channel": "latest"
+      }
+    ],
     "mac": {
       "category": "public.app-category.video",
       "target": [
@@ -42,6 +49,12 @@
         "zip"
       ],
       "icon": "build/icon.png"
+    },
+    "dmg": {
+      "artifactName": "Focal-Mac.dmg"
+    },
+    "nsis": {
+      "artifactName": "Focal-Windows-Setup.exe"
     }
   },
   "devDependencies": {
@@ -50,5 +63,8 @@
   },
   "optionalDependencies": {
     "uiohook-napi": "^1.5.4"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }
