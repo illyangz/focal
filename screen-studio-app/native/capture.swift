@@ -103,6 +103,40 @@ func cropPixelBuffer(_ src: CVPixelBuffer, toX x: Int, y: Int, w: Int, h: Int) -
     return out
 }
 
+// Point-to-pixel scale factor (2.0 on a standard Retina display, 1.0 on a
+// non-Retina one) for whichever display contains point `p` — used to size
+// the actual capture at native pixel resolution instead of point
+// resolution. Pure CoreGraphics (no AppKit/NSScreen), so it's safe to call
+// from any thread/queue: iterates the active display list, finds the one
+// whose bounds contain `p`, and compares its real pixel width (from
+// CGDisplayCopyDisplayMode) against its logical/point width (from
+// CGDisplayBounds). Works the same way for both a display target (p = the
+// display's own origin, trivially finds itself) and a window target (p =
+// the window's origin, finds whichever display it's currently on — correct
+// even in mixed-DPI multi-monitor setups).
+func scaleFactorForPoint(_ p: CGPoint) -> Double {
+    var displayCount: UInt32 = 0
+    CGGetActiveDisplayList(0, nil, &displayCount)
+    guard displayCount > 0 else { return 1.0 }
+    var ids = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+    CGGetActiveDisplayList(displayCount, &ids, &displayCount)
+    for id in ids {
+        let bounds = CGDisplayBounds(id)
+        if bounds.contains(p), let mode = CGDisplayCopyDisplayMode(id), bounds.width > 0 {
+            return Double(mode.pixelWidth) / Double(bounds.width)
+        }
+    }
+    // Point wasn't inside any active display's bounds (shouldn't normally
+    // happen for a resolved window/display target) — fall back to the
+    // main display's scale rather than silently assuming 1x.
+    let mainID = CGMainDisplayID()
+    if let mode = CGDisplayCopyDisplayMode(mainID) {
+        let mainBounds = CGDisplayBounds(mainID)
+        if mainBounds.width > 0 { return Double(mode.pixelWidth) / Double(mainBounds.width) }
+    }
+    return 1.0
+}
+
 // ---------------- recording ----------------
 
 final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
@@ -228,25 +262,42 @@ func record(_ args: Args) async {
         return
     }
 
+    // Native pixel resolution, not point resolution — on a Retina display
+    // (the default on essentially every Mac sold since ~2012) capturing at
+    // 1x point resolution records at half the display's actual pixel
+    // density, which matters a lot here since Focal's whole feature is
+    // zooming into clicks: zooming into a 1x-captured source means the
+    // zoomed-in view is upscaled from already-soft detail. WINDOWFRAME
+    // below deliberately keeps reporting point units unchanged — the
+    // renderer's cursor-position mapping only ever computes a normalized
+    // 0..1 fraction from it, so it doesn't care what resolution the actual
+    // pixel buffer is, only that x/y and width/height stay in the same
+    // (point) units as each other.
+    let scale = scaleFactorForPoint(originPoint)
+
     let config = SCStreamConfiguration()
     config.showsCursor = false // the whole point of this helper
     config.pixelFormat = kCVPixelFormatType_32BGRA
     config.queueDepth = 6
     config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(args.fps))
-    // 1x point resolution for this proof of concept — simplifies crop math to a
-    // direct 1:1 mapping; can be upsized to native/retina resolution later.
-    config.width = max(2, Int(pointW))
-    config.height = max(2, Int(pointH))
+    config.width = max(2, Int((pointW * scale).rounded()))
+    config.height = max(2, Int((pointH * scale).rounded()))
 
     var cropPixelRect: CGRect? = nil
     var outW = config.width
     var outH = config.height
     if let c = args.crop {
-        let localX = c.minX - originPoint.x
-        let localY = c.minY - originPoint.y
-        cropPixelRect = CGRect(x: localX, y: localY, width: c.width, height: c.height)
-        outW = Int(c.width) & ~1  // even dims for H.264
-        outH = Int(c.height) & ~1
+        // The crop rect arrives from Electron in point coordinates (that's
+        // still what the user actually dragged out) — convert into the
+        // pixel buffer's own (now native-res) coordinate space before the
+        // raster crop in cropPixelBuffer().
+        let localX = (c.minX - originPoint.x) * scale
+        let localY = (c.minY - originPoint.y) * scale
+        let cw = c.width * scale
+        let ch = c.height * scale
+        cropPixelRect = CGRect(x: localX, y: localY, width: cw, height: ch)
+        outW = Int(cw.rounded()) & ~1  // even dims for H.264
+        outH = Int(ch.rounded()) & ~1
     } else {
         outW = outW & ~1
         outH = outH & ~1
